@@ -45,7 +45,7 @@
       "label": "K8s: criar cluster GPU",
       "detail": "Recria o cluster kind com suporte a GPU (DESTRUTIVO: apaga o cluster kind atual)",
       "type": "shell",
-      "command": "bash \"${workspaceFolder}/../1-create-gpu-cluster.sh\"",
+      "command": "bash \"${workspaceFolder}/scripts/1-create-gpu-cluster.sh\"",
       "problemMatcher": [],
       "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
     },
@@ -53,7 +53,7 @@
       "label": "K8s: configurar ARC (device plugin + runners)",
       "detail": "Instala device plugin, controller do ARC e os runner sets (com e sem GPU)",
       "type": "shell",
-      "command": "bash \"${workspaceFolder}/../2-setup-arc.sh\" Lorkyrr/pytorch-gpu-sandbox",
+      "command": "bash \"${workspaceFolder}/scripts/2-setup-arc.sh\" Lorkyrr/pytorch-gpu-sandbox",
       "options": {
         "env": { "GITHUB_TOKEN": "${input:githubToken}" }
       },
@@ -74,7 +74,7 @@
       "label": "K8s: derrubar cluster",
       "detail": "Libera GPU/RAM/CPU — os values.yaml ficam salvos pra próxima vez",
       "type": "shell",
-      "command": "bash \"${workspaceFolder}/../3-teardown-cluster.sh\"",
+      "command": "bash \"${workspaceFolder}/scripts/3-teardown-cluster.sh\"",
       "problemMatcher": [],
       "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
     },

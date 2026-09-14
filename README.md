@@ -73,7 +73,7 @@ Both `k8s/gpu-runner-values*.yaml` files request the same `nvidia.com/gpu: 1` fr
 ```bash
 helm upgrade --install arc-runner-set-gpu \
   oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set \
-  -n arc-runners -f k8s/gpu-runner-values.yaml           # python (default)
+  -n arc-systems -f k8s/gpu-runner-values.yaml           # python (default)
   # -f k8s/gpu-runner-values.docker.yaml                 # or: docker
 ```
 
@@ -87,6 +87,24 @@ These `k8s/*.yaml` files describe the intended cluster state — they need to be
 - An NVIDIA GPU with recent drivers
 
 No local Python setup is required if you use Docker; the image already bundles PyTorch, torchvision, and torchaudio.
+
+### Host environment this was built and tested on
+
+Exact versions of everything installed on the host machine (not inside the containers — those pin nothing beyond `pytorch/pytorch:latest`, see [Local test results](#local-test-results) for the PyTorch/CUDA/cuDNN versions that image resolved to). Useful if something behaves differently for you and you want to diff versions first.
+
+| Component | Version | Installed via |
+|---|---|---|
+| OS | Ubuntu 26.04.1 LTS (kernel `7.0.0-31-generic`) | — |
+| GPU | NVIDIA GeForce RTX 3050 Laptop, 4 GB VRAM | — |
+| NVIDIA driver | 615.71.09 (CUDA 13.4 max supported) | distro driver package |
+| NVIDIA Container Toolkit | 1.20.0 (`nvidia-ctk`, `nvidia-container-cli`) | apt (`nvidia-container-toolkit` / `-base`) |
+| Docker Engine | 29.8.0 | official Docker `apt` repo (`docker-ce`) |
+| Docker Compose | v5.5.1 (plugin) | bundled with the above |
+| kind | v0.33.0 | binary from [kubernetes-sigs/kind](https://github.com/kubernetes-sigs/kind) releases, `/usr/local/bin` |
+| kubectl | v1.37.0 | binary from `dl.k8s.io`, `/usr/local/bin` |
+| Helm | v3.22.0 | official install script (`get-helm-3`, `curl \| bash`) — **not** `snap`/`apt` |
+
+Only relevant if you're touching the [K8s + ARC CI setup](#running-in-ci-on-a-real-gpu-kubernetes--actions-runner-controller); the plain Docker Compose path in this README only needs Docker + NVIDIA Container Toolkit + a driver.
 
 ## Running with Docker Compose
 
@@ -141,3 +159,4 @@ python main.py
 - [k8s/gpu-runner-values.yaml](k8s/gpu-runner-values.yaml) — Helm values for `arc-runner-set-gpu` matching the Python workflow (current default)
 - [k8s/gpu-runner-values.docker.yaml](k8s/gpu-runner-values.docker.yaml) — Helm values matching the Docker workflow instead
 - [k8s/runner-image/Dockerfile](k8s/runner-image/Dockerfile) — custom runner image (Python + PyTorch/CUDA) so CI runs `main.py` natively, no Docker-in-CI
+- [scripts/1-create-gpu-cluster.sh](scripts/1-create-gpu-cluster.sh) / [scripts/2-setup-arc.sh](scripts/2-setup-arc.sh) / [scripts/3-teardown-cluster.sh](scripts/3-teardown-cluster.sh) — create/configure/tear down the local `kind` + ARC cluster (wired up as the VS Code tasks in [Debugging](#debugging)). `2-setup-arc.sh` takes `REPO [python|docker]` and installs the NVIDIA device plugin and the ARC controller/runner-sets as two parallel tracks (the device plugin doesn't depend on ARC, and the two runner sets only depend on the controller, not on each other), instead of one long serial chain. [scripts/kubernetes-gpu-arc-referencia.sh](scripts/kubernetes-gpu-arc-referencia.sh) is the commented study reference behind them

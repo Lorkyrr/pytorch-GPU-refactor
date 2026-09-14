@@ -96,10 +96,10 @@ por manter essa máquina de pé, seguro e com os pré-requisitos certos (nesse
 caso: driver NVIDIA, Docker, Kubernetes).
 
 O caminho que você montou (documentado nos scripts irmãos
-[1-create-gpu-cluster.sh](../1-create-gpu-cluster.sh),
-[2-setup-arc.sh](../2-setup-arc.sh),
-[3-teardown-cluster.sh](../3-teardown-cluster.sh) e no arquivo de referência
-[kubernetes-gpu-arc-referencia.sh](../kubernetes-gpu-arc-referencia.sh)) foi:
+[1-create-gpu-cluster.sh](scripts/1-create-gpu-cluster.sh),
+[2-setup-arc.sh](scripts/2-setup-arc.sh),
+[3-teardown-cluster.sh](scripts/3-teardown-cluster.sh) e no arquivo de referência
+[kubernetes-gpu-arc-referencia.sh](scripts/kubernetes-gpu-arc-referencia.sh)) foi:
 
 1. Um cluster Kubernetes local via **kind** (`Kubernetes IN Docker` — cria
    "nodes" de Kubernetes que são, na real, containers Docker comuns).
@@ -331,7 +331,7 @@ só tem uma placa e quer ela inteira pro treino).
 cluster é recriado, o device plugin precisa ser reinstalado, senão qualquer
 pod que peça `nvidia.com/gpu` fica preso com o erro `0/1 nodes are
 available: 1 Insufficient nvidia.com/gpu`. É por isso que
-[2-setup-arc.sh](../2-setup-arc.sh) reinstala o device plugin toda vez que
+[2-setup-arc.sh](scripts/2-setup-arc.sh) reinstala o device plugin toda vez que
 roda, em vez de assumir que ele já está lá.
 
 ---
@@ -753,7 +753,7 @@ sozinho, sem precisar ficar olhando o terminal esperando a hora certa.
 
 ### 14.3 `tasks.json`: segredos sem aparecer no terminal
 
-As tasks que chamam [2-setup-arc.sh](../2-setup-arc.sh) precisam de um
+As tasks que chamam [2-setup-arc.sh](scripts/2-setup-arc.sh) precisam de um
 `GITHUB_TOKEN`. Em vez de pedir pra você colar ele direto no comando (o que
 apareceria ecoado no painel do terminal, ficando visível no histórico),
 usamos um **input** do VS Code:
@@ -774,7 +774,7 @@ E injetamos ele via `options.env` da task (não dentro da string de
 
 ```json
 {
-  "command": "bash \"${workspaceFolder}/../2-setup-arc.sh\" Lorkyrr/pytorch-gpu-sandbox",
+  "command": "bash \"${workspaceFolder}/scripts/2-setup-arc.sh\" Lorkyrr/pytorch-gpu-sandbox",
   "options": { "env": { "GITHUB_TOKEN": "${input:githubToken}" } }
 }
 ```
@@ -880,6 +880,17 @@ que ele está agora:
    conferir com `git log origin/main` se o que está no GitHub realmente
    bate com o que está local antes de confiar em qualquer run de CI.
 
+> **Atualização:** o item que faltava — os 4 scripts (`1-create-gpu-cluster.sh`,
+> `2-setup-arc.sh`, `3-teardown-cluster.sh`,
+> `kubernetes-gpu-arc-referencia.sh`) viviam numa pasta **fora** deste
+> repositório git, então um `git clone` sozinho não trazia o que as tasks do
+> VS Code chamavam — foi resolvido: os 4 agora estão versionados em
+> [scripts/](scripts/), e `2-setup-arc.sh` passou a instalar o device plugin
+> e o ARC (controller + os dois runner sets) em duas trilhas paralelas em vez
+> de uma cadeia serial, pra rodar mais rápido. As versões exatas de
+> Docker/kind/kubectl/Helm/driver NVIDIA/CTK usadas nesta máquina estão no
+> [README](README.md#host-environment-this-was-built-and-tested-on).
+
 ---
 
 ## 18. Comandos de referência rápida
@@ -907,12 +918,13 @@ helm upgrade --install arc-runner-set-gpu \
   # -f k8s/gpu-runner-values.docker.yaml                # ou docker
 
 # Recriar o cluster do zero
-./1-create-gpu-cluster.sh
+./scripts/1-create-gpu-cluster.sh
 export GITHUB_TOKEN='...'
-./2-setup-arc.sh Lorkyrr/pytorch-gpu-sandbox
+./scripts/2-setup-arc.sh Lorkyrr/pytorch-gpu-sandbox        # variante docker (padrão)
+# ./scripts/2-setup-arc.sh Lorkyrr/pytorch-gpu-sandbox python   # ou variante python, se já publicou a imagem custom
 
 # Derrubar o cluster (libera GPU/RAM/CPU)
-./3-teardown-cluster.sh
+./scripts/3-teardown-cluster.sh
 
 # Conferir se uma run de CI rodou no commit certo
 git log --oneline -1
