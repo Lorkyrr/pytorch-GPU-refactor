@@ -1,0 +1,60 @@
+name: CIFAR-10 - Treinar ResNet-20
+
+on:
+  workflow_dispatch:
+    inputs:
+      epochs:
+        description: "Número de épocas de treino"
+        required: false
+        default: "30"
+      batch_size:
+        description: "Tamanho do lote"
+        required: false
+        default: "128"
+      lr:
+        description: "Taxa de aprendizado inicial"
+        required: false
+        default: "0.1"
+
+concurrency:
+  group: gpu-runner
+  cancel-in-progress: false
+
+jobs:
+  treinar:
+    runs-on: arc-runner-set-gpu
+    timeout-minutes: 120
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Cache do dataset CIFAR-10
+        uses: actions/cache@v4
+        with:
+          path: data
+          key: cifar10-dataset-v1
+
+      - name: Build da imagem Docker
+        run: docker build -t pytorch-cifar10:${{ github.sha }} .
+
+      - name: Treinar ResNet-20 no CIFAR-10
+        run: |
+          docker run --rm --gpus all \
+            -e PYTHONUNBUFFERED=1 \
+            -v ${{ github.workspace }}:/app \
+            pytorch-cifar10:${{ github.sha }} \
+            python3 main.py train \
+              --epochs ${{ inputs.epochs }} \
+              --batch-size ${{ inputs.batch_size }} \
+              --lr ${{ inputs.lr }}
+
+      - name: Corrigir permissões dos arquivos gerados pelo container
+        if: always()
+        run: sudo chown -R $(id -u):$(id -g) "${{ github.workspace }}" || true
+
+      - name: Upload do checkpoint treinado
+        uses: actions/upload-artifact@v4
+        with:
+          name: resnet20-cifar10-checkpoint
+          path: resnet20_cifar10.pth
+          if-no-files-found: error
