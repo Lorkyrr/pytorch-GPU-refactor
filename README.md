@@ -150,7 +150,7 @@ python main.py
 - [compose.yaml](compose.yaml) — runs the container with GPU access
 - [compose.debug.yaml](compose.debug.yaml) — runs the container with `debugpy` for remote debugging
 - [.vscode/launch.json](.vscode/launch.json) / [.vscode/tasks.json](.vscode/tasks.json) — VS Code debug config and tasks tying together Docker Compose and the cluster lifecycle scripts (see [Debugging](#debugging))
-- [TESTE_DE_AMBIENTE_LOCAL_1.txt](TESTE_DE_AMBIENTE_LOCAL_1.txt) / [TESTE_DE_AMBIENTE_LOCAL_2.txt](TESTE_DE_AMBIENTE_LOCAL_2.txt) — real output logs from two local training runs (see [Local test results](#local-test-results))
+- [testes-de-ambiente/TESTE_DE_AMBIENTE_LOCAL_1.txt](testes-de-ambiente/TESTE_DE_AMBIENTE_LOCAL_1.txt) / [testes-de-ambiente/TESTE_DE_AMBIENTE_LOCAL_2.txt](testes-de-ambiente/TESTE_DE_AMBIENTE_LOCAL_2.txt) — real output logs from two local training runs (see [Local test results](#local-test-results))
 - [.github/workflows/pytorch-gpu-python.yaml](.github/workflows/pytorch-gpu-python.yaml) — runs benchmark/train in CI natively on the real RTX 3050, no Docker (current default; see [Running in CI on a real GPU](#running-in-ci-on-a-real-gpu-kubernetes--actions-runner-controller))
 - [.github/workflows/pytorch-gpu-docker.yaml](.github/workflows/pytorch-gpu-docker.yaml) — same, via `docker build`/`docker run --gpus all` (reference/fallback variant)
 - [.github/workflows/teste-gpu.yaml](.github/workflows/teste-gpu.yaml) — minimal GPU-visibility sanity check for the self-hosted runner
@@ -160,3 +160,8 @@ python main.py
 - [k8s/gpu-runner-values.docker.yaml](k8s/gpu-runner-values.docker.yaml) — Helm values matching the Docker workflow instead
 - [k8s/runner-image/Dockerfile](k8s/runner-image/Dockerfile) — custom runner image (Python + PyTorch/CUDA) so CI runs `main.py` natively, no Docker-in-CI
 - [scripts/1-create-gpu-cluster.sh](scripts/1-create-gpu-cluster.sh) / [scripts/2-setup-arc.sh](scripts/2-setup-arc.sh) / [scripts/3-teardown-cluster.sh](scripts/3-teardown-cluster.sh) — create/configure/tear down the local `kind` + ARC cluster (wired up as the VS Code tasks in [Debugging](#debugging)). `2-setup-arc.sh` takes `REPO [python|docker]` and installs the NVIDIA device plugin and the ARC controller/runner-sets as two parallel tracks (the device plugin doesn't depend on ARC, and the two runner sets only depend on the controller, not on each other), instead of one long serial chain. [scripts/kubernetes-gpu-arc-referencia.sh](scripts/kubernetes-gpu-arc-referencia.sh) is the commented study reference behind them
+- [LICENSE](LICENSE) — MIT
+
+## License
+
+MIT — see [LICENSE](LICENSE).
