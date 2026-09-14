@@ -31,8 +31,9 @@ concurrency:
 jobs:
   run:
     # Roda no runner self-hosted (ARC) com a RTX 3050 real alocada via
-    # Kubernetes device plugin (nvidia.com/gpu) — ver k8s/. Nada aqui
-    # depende de runner hospedado pela GitHub.
+    # Kubernetes device plugin (nvidia.com/gpu) — ver k8s/. Sem Docker:
+    # python3 roda direto dentro deste pod, que é quem reservou a GPU
+    # (imagem com PyTorch/CUDA já instalados, ver k8s/runner-image/).
     runs-on: arc-runner-set-gpu
     timeout-minutes: 120
     steps:
@@ -46,45 +47,21 @@ jobs:
           path: data
           key: cifar10-dataset-v1
 
-      - name: Build da imagem Docker
-        run: docker build -t pytorch-cifar10:${{ github.sha }} .
-
       - name: Rodar benchmark de GPU/cuDNN/cuBLAS
         if: github.event.inputs.mode == 'benchmark'
-        run: |
-          docker run --rm --gpus all \
-            -e PYTHONUNBUFFERED=1 \
-            pytorch-cifar10:${{ github.sha }} \
-            python3 main.py benchmark
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: python3 main.py benchmark
 
       - name: Treinar ResNet-20 no CIFAR-10
         if: github.event.inputs.mode == 'train'
         env:
-          CONTAINER: treino-${{ github.run_id }}
+          PYTHONUNBUFFERED: "1"
         run: |
-          docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
-          docker run --gpus all \
-            -e PYTHONUNBUFFERED=1 \
-            --name "$CONTAINER" \
-            pytorch-cifar10:${{ github.sha }} \
-            python3 main.py train \
-              --epochs ${{ github.event.inputs.epochs }} \
-              --batch-size ${{ github.event.inputs.batch_size }} \
-              --lr ${{ github.event.inputs.lr }}
-
-      # Sem bind mount de propósito: o daemon Docker deste runner não
-      # compartilha filesystem com o pod (setup DinD/socket via k8s), então
-      # -v ${{ github.workspace }}:/app sobrescreveria /app vazio por cima
-      # do que o build copiou. docker cp funciona via API, não depende disso.
-      - name: Extrair checkpoint e dataset do container
-        if: always() && github.event.inputs.mode == 'train'
-        env:
-          CONTAINER: treino-${{ github.run_id }}
-        run: |
-          docker cp "$CONTAINER":/app/resnet20_cifar10.pth ./resnet20_cifar10.pth || true
-          rm -rf data
-          docker cp "$CONTAINER":/app/data ./data || true
-          docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+          python3 main.py train \
+            --epochs ${{ github.event.inputs.epochs }} \
+            --batch-size ${{ github.event.inputs.batch_size }} \
+            --lr ${{ github.event.inputs.lr }}
 
       - name: Upload do checkpoint treinado
         if: github.event.inputs.mode == 'train'
@@ -93,7 +70,3 @@ jobs:
           name: resnet20-cifar10-checkpoint
           path: resnet20_cifar10.pth
           if-no-files-found: warn
-
-      - name: Limpar imagem Docker
-        if: always()
-        run: docker rmi pytorch-cifar10:${{ github.sha }} || true
