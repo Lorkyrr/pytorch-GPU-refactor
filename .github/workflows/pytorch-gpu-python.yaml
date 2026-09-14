@@ -1,11 +1,11 @@
 name: PyTorch GPU (CIFAR-10) - Python
 
 on:
-  # push temporário pra validar o fallback de pip a cada commit sem
-  # precisar clicar em "Run workflow" toda hora — tirar depois que
-  # confirmarmos que ficou redondo (ver k8s/gpu-runner-values.yaml TODO).
-  push:
-    branches: [main]
+  # Removido o gatilho de push: na banda larga real desta máquina, o
+  # download do torch+deps CUDA (varios wheels, um só já passa de 500 MB)
+  # caiu no meio e ficou preso ~30min tentando retomar — disparar isso a
+  # cada commit é inviável até k8s/runner-image/Dockerfile existir de
+  # verdade (ver TODO em k8s/gpu-runner-values.yaml). Só manual por ora.
   workflow_dispatch:
     inputs:
       mode:
