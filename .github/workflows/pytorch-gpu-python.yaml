@@ -1,6 +1,11 @@
 name: PyTorch GPU (CIFAR-10) - Python
 
 on:
+  # push temporário pra validar o fallback de pip a cada commit sem
+  # precisar clicar em "Run workflow" toda hora — tirar depois que
+  # confirmarmos que ficou redondo (ver k8s/gpu-runner-values.yaml TODO).
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       mode:
@@ -35,6 +40,9 @@ jobs:
     # python3 roda direto dentro deste pod, que é quem reservou a GPU.
     runs-on: arc-runner-set-gpu
     timeout-minutes: 120
+    env:
+      # push não tem inputs (só workflow_dispatch tem) — cai pra benchmark.
+      MODE: ${{ github.event.inputs.mode || 'benchmark' }}
     steps:
       - name: Checkout do código
         uses: actions/checkout@v4
@@ -60,24 +68,24 @@ jobs:
       - name: Instalar dependências Python
         run: |
           curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
-          python3 /tmp/get-pip.py --user
+          python3 /tmp/get-pip.py --user --break-system-packages
           python3 -m pip install --user --break-system-packages -r requirements.txt
 
       - name: Cache do dataset CIFAR-10
-        if: github.event.inputs.mode == 'train'
+        if: env.MODE == 'train'
         uses: actions/cache@v4
         with:
           path: data
           key: cifar10-dataset-v1
 
       - name: Rodar benchmark de GPU/cuDNN/cuBLAS
-        if: github.event.inputs.mode == 'benchmark'
+        if: env.MODE == 'benchmark'
         env:
           PYTHONUNBUFFERED: "1"
         run: python3 main.py benchmark
 
       - name: Treinar ResNet-20 no CIFAR-10
-        if: github.event.inputs.mode == 'train'
+        if: env.MODE == 'train'
         env:
           PYTHONUNBUFFERED: "1"
         run: |
@@ -87,7 +95,7 @@ jobs:
             --lr ${{ github.event.inputs.lr }}
 
       - name: Upload do checkpoint treinado
-        if: github.event.inputs.mode == 'train'
+        if: env.MODE == 'train'
         uses: actions/upload-artifact@v4
         with:
           name: resnet20-cifar10-checkpoint
