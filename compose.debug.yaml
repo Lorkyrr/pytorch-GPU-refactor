@@ -1,3 +1,21 @@
+# Variante de debug do compose.yaml: builda a mesma imagem do Dockerfile,
+# mas troca o CMD padrão ("python3 main.py") por uma instalação on-the-fly
+# do debugpy e sobe main.py escutando um debugger remoto na porta 5678
+# antes de executar qualquer linha — o processo fica parado em
+# --wait-for-client até uma IDE (ex.: extensão Python do VS Code, config
+# "Python: Remote Attach" apontando pra localhost:5678) se conectar.
+#
+# Uso:
+#   docker compose -f compose.debug.yaml up --build
+#
+# Só roda "python main.py" (benchmark padrão) — pra debugar o modo
+# `train`, troque o final do comando abaixo por "main.py train ...".
+#
+# Diferente de compose.yaml: aqui NÃO há reserva de GPU
+# (deploy.resources.reservations.devices) nem bind mount do projeto —
+# então este container roda isolado, sem CUDA disponível (CPU-only) e
+# sem persistir dataset/checkpoint no host. Se quiser debugar com GPU
+# real, copie o bloco `deploy` e o volume `.:/app` de compose.yaml.
 services:
   app-debug:
     image: pytorch-app-debug

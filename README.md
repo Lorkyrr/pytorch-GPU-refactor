@@ -110,6 +110,8 @@ docker compose run --rm app python3 main.py train --epochs 30
 docker compose -f compose.debug.yaml up --build
 ```
 
+Unlike `compose.yaml`, this variant requests no GPU device and mounts no volume, so it runs CPU-only and doesn't persist `./data`/checkpoints back to the host — see the comments in [compose.debug.yaml](compose.debug.yaml) if you need to debug with real CUDA.
+
 ## Running without Docker
 
 If you already have a CUDA-enabled PyTorch installed locally:

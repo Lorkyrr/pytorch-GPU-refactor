@@ -1,17 +1,36 @@
+# Ambiente de desenvolvimento local via Docker Compose — builda a imagem
+# definida no Dockerfile (pytorch/pytorch:latest + torchvision/torchaudio)
+# e sobe o container com acesso total à GPU NVIDIA do host.
+#
+# Uso:
+#   docker compose up --build                                      # benchmark (CMD padrão do Dockerfile)
+#   docker compose run --rm app python3 main.py train --epochs 30  # treino, sobrescrevendo o comando
+#
+# Requer o NVIDIA Container Toolkit instalado no host — é ele que faz o
+# bloco `deploy.resources.reservations.devices` abaixo resolver para os
+# dispositivos /dev/nvidia* reais; sem ele, a reserva falha na hora do
+# `docker compose up`.
 services:
   app:
     build: .
     container_name: pytorch_dev_env
     volumes:
+      # Monta o diretório do projeto inteiro dentro do container: o
+      # dataset baixado em ./data e o checkpoint resnet20_cifar10.pth
+      # gerado pelo treino aparecem de volta no host sem precisar de
+      # `docker cp` (diferente do workflow Docker de CI, que roda sem
+      # bind mount — ver .github/workflows/pytorch-gpu-docker.yaml).
       - .:/app
     environment:
+      # Sem isso o stdout do Python fica bufferizado e os logs de
+      # progresso do treino/benchmark só aparecem em lotes, com atraso.
       - PYTHONUNBUFFERED=1
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: all
+              count: all          # expõe todas as GPUs do host (aqui, só a RTX 3050)
               capabilities: [gpu]
     tty: true
     stdin_open: true
