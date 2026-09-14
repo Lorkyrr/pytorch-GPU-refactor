@@ -1,0 +1,33 @@
+# Variante PYTHON (padrão) dos values do gha-runner-scale-set — usada
+# pelo workflow .github/workflows/pytorch-gpu-python.yaml. Pra voltar a
+# rodar .github/workflows/pytorch-gpu-docker.yaml, aplique
+# k8s/gpu-runner-values.docker.yaml no lugar deste.
+#
+#   helm upgrade --install arc-runner-set-gpu \
+#     oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set \
+#     -n arc-runners -f k8s/gpu-runner-values.yaml
+#
+# `resources.limits.nvidia.com/gpu: 1` faz o scheduler do Kubernetes
+# reservar de verdade a RTX 3050 pra este pod (via
+# nvidia-device-plugin.yaml, o DaemonSet oficial da NVIDIA aplicado com
+# kubectl — sem GPU Operator/Helm).
+#
+# Sem Docker aqui: nada de socket do host montado. A imagem do runner
+# (ver runner-image/Dockerfile) já traz Python + PyTorch/CUDA, e os
+# workflows chamam `python3 main.py ...` direto — o processo roda dentro
+# deste mesmo pod, que é o que de fato reservou a GPU. Isso fecha a
+# lacuna que existia antes (treino rodando via socket do Docker do host,
+# fora do agendamento do Kubernetes).
+githubConfigUrl: "https://github.com/Lorkyrr/pytorch-gpu-sandbox"
+githubConfigSecret: pre-defined-secret
+
+template:
+  spec:
+    containers:
+      - name: runner
+        # TODO: build + push k8s/runner-image/Dockerfile e trocar aqui.
+        image: <seu-registry>/pytorch-gpu-sandbox-runner:latest
+        command: ["/home/runner/run.sh"]
+        resources:
+          limits:
+            nvidia.com/gpu: 1

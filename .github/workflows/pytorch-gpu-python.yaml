@@ -1,0 +1,87 @@
+name: PyTorch GPU (CIFAR-10) - Python
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Modo de execução"
+        required: true
+        default: "benchmark"
+        type: choice
+        options:
+          - benchmark
+          - train
+      epochs:
+        description: "Número de épocas (somente no modo train)"
+        required: false
+        default: "30"
+      batch_size:
+        description: "Tamanho do lote (somente no modo train)"
+        required: false
+        default: "128"
+      lr:
+        description: "Taxa de aprendizado inicial (somente no modo train)"
+        required: false
+        default: "0.1"
+
+concurrency:
+  group: gpu-runner
+  cancel-in-progress: false
+
+jobs:
+  run:
+    # Roda no runner self-hosted (ARC) com a RTX 3050 real alocada via
+    # Kubernetes device plugin (nvidia.com/gpu) — ver k8s/. Sem Docker:
+    # python3 roda direto dentro deste pod, que é quem reservou a GPU.
+    runs-on: arc-runner-set-gpu
+    timeout-minutes: 120
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Cache de pacotes pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+
+      # Enquanto k8s/runner-image/Dockerfile não é publicado (ver TODO em
+      # k8s/gpu-runner-values.yaml), o pod ainda sobe com a imagem padrão
+      # do runner, sem PyTorch — daí o "ModuleNotFoundError: No module
+      # named 'torch'". Instala em --user pra funcionar mesmo sem root
+      # (não há mais runAsUser: 0 no values.yaml).
+      - name: Instalar dependências Python
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install --user -r requirements.txt
+
+      - name: Cache do dataset CIFAR-10
+        if: github.event.inputs.mode == 'train'
+        uses: actions/cache@v4
+        with:
+          path: data
+          key: cifar10-dataset-v1
+
+      - name: Rodar benchmark de GPU/cuDNN/cuBLAS
+        if: github.event.inputs.mode == 'benchmark'
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: python3 main.py benchmark
+
+      - name: Treinar ResNet-20 no CIFAR-10
+        if: github.event.inputs.mode == 'train'
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          python3 main.py train \
+            --epochs ${{ github.event.inputs.epochs }} \
+            --batch-size ${{ github.event.inputs.batch_size }} \
+            --lr ${{ github.event.inputs.lr }}
+
+      - name: Upload do checkpoint treinado
+        if: github.event.inputs.mode == 'train'
+        uses: actions/upload-artifact@v4
+        with:
+          name: resnet20-cifar10-checkpoint
+          path: resnet20_cifar10.pth
+          if-no-files-found: warn
