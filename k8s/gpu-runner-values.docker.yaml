@@ -6,7 +6,7 @@
 #
 #   helm upgrade --install arc-runner-set-gpu \
 #     oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set \
-#     -n arc-runners -f k8s/gpu-runner-values.docker.yaml
+#     -n arc-systems -f k8s/gpu-runner-values.docker.yaml
 #
 # `resources.limits.nvidia.com/gpu: 1` faz o scheduler do Kubernetes
 # reservar de verdade a RTX 3050 pra este pod (via

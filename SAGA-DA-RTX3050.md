@@ -13,7 +13,9 @@ Cada capítulo é independente o bastante pra ser lido fora de ordem, mas eles
 contam uma história em sequência: começamos com um script Python rodando
 dentro de um container Docker no seu notebook, e terminamos com um cluster
 Kubernetes de verdade, com sua RTX 3050 sendo reservada como recurso
-agendável, treinando um ResNet-20 sozinho a cada `git push`. No meio do
+agendável, treinando um ResNet-20 sozinho sempre que você dispara o
+workflow (hoje é sob demanda, via `workflow_dispatch` — ver capítulo 17
+sobre por que o gatilho automático em `push` foi removido). No meio do
 caminho, quebramos as coisas umas seis vezes de formas diferentes — e cada
 quebra ensina algo que o caminho feliz não ensina.
 
@@ -388,7 +390,7 @@ template:
 ```
 
 Isso é um **resource request/limit** — a mesma mecânica usada pra CPU
-(`cpu: "2"`) ou memória (`memory: "4Gi""`), só que aplicada ao recurso
+(`cpu: "2"`) ou memória (`memory: "4Gi"`), só que aplicada ao recurso
 customizado que o device plugin (seção 5.4) anunciou. Ao ver isso, o
 scheduler do Kubernetes só agenda esse pod num node que tenha
 `nvidia.com/gpu` disponível na capacidade **e** reserva essa unidade
@@ -868,17 +870,23 @@ que ele está agora:
    capítulo 10/12 a cada run. Depois de publicada, trocar o `image:`
    placeholder em [k8s/gpu-runner-values.yaml](k8s/gpu-runner-values.yaml)
    e reaplicar com `helm upgrade`.
-2. **Decidir se o gatilho `push:` continua** em
-   [.github/workflows/pytorch-gpu-python.yaml](.github/workflows/pytorch-gpu-python.yaml)
-   — ele foi adicionado como temporário pra facilitar teste, mas é caro
-   numa conexão lenta enquanto o cache do pip não está garantido.
+2. ~~**Decidir se o gatilho `push:` continua** em
+   [.github/workflows/pytorch-gpu-python.yaml](.github/workflows/pytorch-gpu-python.yaml)~~
+   — **resolvido**: o gatilho foi removido (commit `0abdb15`), o workflow
+   só dispara por `workflow_dispatch` agora. Motivo registrado no próprio
+   arquivo e no capítulo 12: numa conexão lenta, baixar o `torch` com CUDA a
+   cada `push` era caro demais sem o cache do pip garantido.
 3. **`.venv` local quebrado** — só importa se algum dia você quiser rodar
    sem Docker nesta pasta principal; hoje ninguém usa esse `.venv` (tudo
-   passa por Docker ou pelo pod de CI).
-4. **Nenhum push foi feito** de vários commits recentes — a combinação de
-   "só eu commito, você dá o push" (como combinamos) significa que vale
-   conferir com `git log origin/main` se o que está no GitHub realmente
-   bate com o que está local antes de confiar em qualquer run de CI.
+   passa por Docker ou pelo pod de CI). Continua quebrado (o `pyvenv.cfg`
+   ainda aponta pra outro projeto) — mas como `.venv/` está no
+   `.gitignore`, isso não viaja para quem clona o repositório, só afeta
+   esta máquina.
+4. ~~**Nenhum push foi feito** de vários commits recentes~~ — **resolvido**:
+   `git log origin/main..HEAD` está vazio, a branch local está em dia com
+   `origin/main`. Ainda vale reconferir isso (`git fetch && git status`)
+   antes de confiar em qualquer run de CI, já que a combinação "só eu
+   commito, você dá o push" pode voltar a divergir a qualquer momento.
 
 > **Atualização:** o item que faltava — os 4 scripts (`1-create-gpu-cluster.sh`,
 > `2-setup-arc.sh`, `3-teardown-cluster.sh`,

@@ -11,7 +11,7 @@ A learning project (author is a beginner) to practice PyTorch, GPU/CUDA programm
 
 Comments and console output in `main.py` are in Portuguese; keep that convention when editing it. License is MIT (see [LICENSE](LICENSE)).
 
-The companion doc [SAGA-DA-RTX3050.md](SAGA-DA-RTX3050.md) is a long-form, narrative "journal" of how the CI-on-real-GPU setup was built, chapter by chapter, including every bug hit along the way and how it was diagnosed — read it when you need the *story* behind a decision. This file (CLAUDE.md) is the dense, structured reference for working in the repo day to day; the gotchas table near the end of the K8s section below is a condensed extract of the SAGA's hard-won lessons, kept here so you don't have to read 900+ lines to avoid repeating a mistake that's already been solved once.
+The companion doc [SAGA-DA-RTX3050.md](SAGA-DA-RTX3050.md) is a long-form, narrative "journal" of how the CI-on-real-GPU setup was built, chapter by chapter, including every bug hit along the way and how it was diagnosed — read it when you need the *story* behind a decision. This file (CLAUDE.md) is the dense, structured reference for working in the repo day to day; the gotchas table near the end of the K8s section below is a condensed extract of the SAGA's hard-won lessons, kept here so you don't have to read 900+ lines to avoid repeating a mistake that's already been solved once. [no-AI.md](no-AI.md) is the opposite of both: a from-scratch roadmap (official docs + self-verification, no pasted answers) for reproducing this whole project by hand instead of with an AI assistant.
 
 ## Repository map
 
@@ -25,6 +25,7 @@ compose.debug.yaml              # debugpy variant: CPU-only, no bind mount
 .gitignore                      # .venv/, data/, *.pth, __pycache__
 README.md                       # user-facing docs, host tool versions, project layout
 SAGA-DA-RTX3050.md              # narrative build log of the K8s/ARC CI setup (18 chapters)
+no-AI.md                        # roadmap to rebuild this project by hand, without an AI assistant
 LICENSE                         # MIT
 testes-de-ambiente/             # raw console output from 2 real local training runs
   TESTE_DE_AMBIENTE_LOCAL_1.txt
@@ -94,7 +95,7 @@ Single-file app, dispatch via `main()` on the positional `modo` argument (`bench
   - Head: `AdaptiveAvgPool2d(1) → Flatten → Linear(64→10)`.
 - **Data** (`cifar10_dataloaders`) — `torchvision.datasets.CIFAR10`, auto-downloads into `--data-dir` (default `./data`) on first run (~170–341 MB depending on source, taking up to ~19 minutes on a slow connection per real runs logged in `testes-de-ambiente/`). Per-channel normalization with fixed CIFAR-10 stats: mean `(0.4914, 0.4822, 0.4465)`, std `(0.2470, 0.2435, 0.2616)`. Train transform adds `RandomCrop(32, padding=4)` + `RandomHorizontalFlip()`; test transform is normalization only. `DataLoader` uses `pin_memory=True`, `num_workers=2`.
 - **Optimizer/schedule** — SGD, momentum 0.9, nesterov, weight_decay 5e-4; `MultiStepLR` with milestones at 50% and 75% of total epochs, gamma 0.1 (two 10x LR drops).
-- **Checkpointing** — after every epoch, if test accuracy improved, saves `model.state_dict()` (not the full model) to `--checkpoint-path`-equivalent, hardcoded default `resnet20_cifar10.pth` at the repo root (gitignored).
+- **Checkpointing** — after every epoch, if test accuracy improved, saves `model.state_dict()` (not the full model) to `checkpoint_path` — not exposed as a CLI flag, hardcoded default `resnet20_cifar10.pth` at the repo root (gitignored).
 - Two real local runs are logged verbatim in `testes-de-ambiente/` — 30 epochs/bs128/lr0.1 reached 89.40% test accuracy in ~5.4 min; 50 epochs/bs64/lr0.05 reached 90.81% in ~9.5 min. Both fit comfortably in the RTX 3050's 4 GB VRAM.
 
 ### Docker / Compose

@@ -160,6 +160,8 @@ python main.py
 - [k8s/gpu-runner-values.docker.yaml](k8s/gpu-runner-values.docker.yaml) — Helm values matching the Docker workflow instead
 - [k8s/runner-image/Dockerfile](k8s/runner-image/Dockerfile) — custom runner image (Python + PyTorch/CUDA) so CI runs `main.py` natively, no Docker-in-CI
 - [scripts/1-create-gpu-cluster.sh](scripts/1-create-gpu-cluster.sh) / [scripts/2-setup-arc.sh](scripts/2-setup-arc.sh) / [scripts/3-teardown-cluster.sh](scripts/3-teardown-cluster.sh) — create/configure/tear down the local `kind` + ARC cluster (wired up as the VS Code tasks in [Debugging](#debugging)). `2-setup-arc.sh` takes `REPO [python|docker]` and installs the NVIDIA device plugin and the ARC controller/runner-sets as two parallel tracks (the device plugin doesn't depend on ARC, and the two runner sets only depend on the controller, not on each other), instead of one long serial chain. [scripts/kubernetes-gpu-arc-referencia.sh](scripts/kubernetes-gpu-arc-referencia.sh) is the commented study reference behind them
+- [SAGA-DA-RTX3050.md](SAGA-DA-RTX3050.md) — long-form, chapter-by-chapter narrative of how the K8s/ARC CI setup in this README was actually built, bugs and all (Portuguese)
+- [no-AI.md](no-AI.md) — a from-scratch roadmap for reproducing this whole project by hand, from official docs alone, without an AI assistant (Portuguese)
 - [LICENSE](LICENSE) — MIT
 
 ## License
