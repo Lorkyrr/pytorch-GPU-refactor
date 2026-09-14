@@ -1,0 +1,65 @@
+======================================================================
+            TESTE DE AMBIENTE LOCAL - PYTORCH + GPU NVIDIA            
+======================================================================
+
+[INFO] Versão do PyTorch: 2.2.1
+[INFO] PyTorch compilado com CUDA: 12.1
+[INFO] CUDA disponível: True
+[INFO] cuDNN habilitado: True
+[INFO] Versão do cuDNN: 8902
+[INFO] GPU detectada: NVIDIA GeForce RTX 3050 Laptop GPU
+[INFO] Memória total da GPU: 3.95 GB
+[INFO] Compute Capability: 8.6
+[INFO] Multiprocessadores (SMs): 16
+[INFO] Suporte a Tensor Cores (FP16 acelerado): Sim
+======================================================================
+                  TREINAMENTO: RESNET-20 NO CIFAR-10                  
+======================================================================
+
+[INFO] Épocas: 30 | Batch size: 128 | LR inicial: 0.1
+[INFO] Baixando/preparando o CIFAR-10 (se necessário)...
+Downloading https://cave.cs.toronto.edu/kriz/cifar-10-python.tar.gz to ./data/cifar-10-python.tar.gz
+100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 170498071/170498071 [18:45<00:00, 151496.00it/s]
+Extracting ./data/cifar-10-python.tar.gz to ./data
+Files already downloaded and verified
+
+----------------------------------------------------------------------
+Progresso do treinamento
+----------------------------------------------------------------------
+[Época 001/30] treino_loss=1.5471 treino_acc=42.22% | teste_loss=1.4522 teste_acc=49.86% | 11.6s
+[Época 002/30] treino_loss=1.0481 treino_acc=62.57% | teste_loss=1.1188 teste_acc=61.27% | 10.6s
+[Época 003/30] treino_loss=0.8501 treino_acc=70.31% | teste_loss=0.9407 teste_acc=67.22% | 10.6s
+[Época 004/30] treino_loss=0.7353 treino_acc=74.39% | teste_loss=0.8644 teste_acc=70.97% | 10.7s
+[Época 005/30] treino_loss=0.6726 treino_acc=76.88% | teste_loss=1.2474 teste_acc=61.65% | 10.6s
+[Época 006/30] treino_loss=0.6328 treino_acc=78.14% | teste_loss=0.8830 teste_acc=70.73% | 10.7s
+[Época 007/30] treino_loss=0.6035 treino_acc=79.38% | teste_loss=0.8132 teste_acc=72.54% | 10.7s
+[Época 008/30] treino_loss=0.5843 treino_acc=79.97% | teste_loss=1.1480 teste_acc=64.89% | 10.7s
+[Época 009/30] treino_loss=0.5646 treino_acc=80.67% | teste_loss=0.7772 teste_acc=74.45% | 10.7s
+[Época 010/30] treino_loss=0.5497 treino_acc=81.13% | teste_loss=0.9259 teste_acc=70.19% | 10.7s
+[Época 011/30] treino_loss=0.5416 treino_acc=81.52% | teste_loss=0.7372 teste_acc=75.64% | 10.7s
+[Época 012/30] treino_loss=0.5277 treino_acc=81.86% | teste_loss=0.8157 teste_acc=74.36% | 10.7s
+[Época 013/30] treino_loss=0.5218 treino_acc=82.23% | teste_loss=0.7176 teste_acc=76.31% | 10.8s
+[Época 014/30] treino_loss=0.5115 treino_acc=82.40% | teste_loss=0.6937 teste_acc=77.70% | 10.8s
+[Época 015/30] treino_loss=0.5011 treino_acc=82.62% | teste_loss=0.6262 teste_acc=79.43% | 10.8s
+[Época 016/30] treino_loss=0.3587 treino_acc=87.82% | teste_loss=0.3726 teste_acc=87.31% | 10.7s
+[Época 017/30] treino_loss=0.3116 treino_acc=89.18% | teste_loss=0.3652 teste_acc=87.61% | 10.8s
+[Época 018/30] treino_loss=0.2942 treino_acc=89.95% | teste_loss=0.3567 teste_acc=88.08% | 10.7s
+[Época 019/30] treino_loss=0.2839 treino_acc=90.07% | teste_loss=0.3531 teste_acc=87.89% | 10.8s
+[Época 020/30] treino_loss=0.2715 treino_acc=90.61% | teste_loss=0.3545 teste_acc=87.96% | 10.8s
+[Época 021/30] treino_loss=0.2634 treino_acc=90.86% | teste_loss=0.3563 teste_acc=87.92% | 10.9s
+[Época 022/30] treino_loss=0.2560 treino_acc=91.08% | teste_loss=0.3457 teste_acc=88.42% | 10.9s
+[Época 023/30] treino_loss=0.2288 treino_acc=92.30% | teste_loss=0.3224 teste_acc=89.07% | 10.8s
+[Época 024/30] treino_loss=0.2193 treino_acc=92.53% | teste_loss=0.3201 teste_acc=89.09% | 10.8s
+[Época 025/30] treino_loss=0.2174 treino_acc=92.55% | teste_loss=0.3172 teste_acc=89.20% | 10.9s
+[Época 026/30] treino_loss=0.2159 treino_acc=92.57% | teste_loss=0.3163 teste_acc=89.30% | 10.9s
+[Época 027/30] treino_loss=0.2124 treino_acc=92.70% | teste_loss=0.3179 teste_acc=89.40% | 10.8s
+[Época 028/30] treino_loss=0.2101 treino_acc=92.87% | teste_loss=0.3178 teste_acc=89.36% | 10.7s
+[Época 029/30] treino_loss=0.2072 treino_acc=92.90% | teste_loss=0.3180 teste_acc=89.36% | 10.9s
+[Época 030/30] treino_loss=0.2052 treino_acc=92.96% | teste_loss=0.3205 teste_acc=89.38% | 10.8s
+
+----------------------------------------------------------------------
+Resultado do treinamento
+----------------------------------------------------------------------
+ -> Melhor acurácia no teste: 89.40%
+ -> Checkpoint salvo em: resnet20_cifar10.pth
+

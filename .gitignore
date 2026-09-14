@@ -1,0 +1,12 @@
+# Ambiente Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Dataset baixado
+data/
+
+# Sistema
+.DS_Store
+*.pth
