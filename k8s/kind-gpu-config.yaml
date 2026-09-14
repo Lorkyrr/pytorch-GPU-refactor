@@ -1,0 +1,38 @@
+# Config real do kind usada pra subir o cluster que hospeda o ARC.
+# Sincronizado manualmente com ~/kind-gpu-config.yaml no host (é de lá
+# que `kind create cluster --config kind-gpu-config.yaml` de fato lê):
+#
+# - extraMounts trazem os binários do NVIDIA Container Toolkit do host
+#   pro node do kind, mais o socket do Docker do host (usado depois em
+#   gpu-runner-values.yaml pro runner rodar `docker build`/`docker run`
+#   direto no daemon do host, não em algo gerenciado pelo k8s).
+# - containerdConfigPatches registra "nvidia" como runtime padrão do
+#   containerd do node — é isso que faz o GPU Operator/device plugin
+#   conseguirem injetar a RTX 3050 de verdade em pods que pedem
+#   nvidia.com/gpu (ex.: o pod do runner em gpu-runner-values.yaml).
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    extraMounts:
+      - hostPath: /dev/null
+        containerPath: /var/run/nvidia-container-devices/all
+      - hostPath: /usr/bin/nvidia-container-runtime
+        containerPath: /usr/bin/nvidia-container-runtime
+        readOnly: true
+      - hostPath: /usr/bin/nvidia-container-cli
+        containerPath: /usr/bin/nvidia-container-cli
+        readOnly: true
+      - hostPath: /usr/bin/nvidia-ctk
+        containerPath: /usr/bin/nvidia-ctk
+        readOnly: true
+      - hostPath: /var/run/docker.sock
+        containerPath: /var/run/docker.sock
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri".containerd]
+      default_runtime_name = "nvidia"
+    [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia]
+      runtime_type = "io.containerd.runc.v2"
+      [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia.options]
+        BinaryName = "/usr/bin/nvidia-container-runtime"

@@ -1,0 +1,50 @@
+# Values reais do chart gha-runner-scale-set (Actions Runner Controller)
+# usadas para subir o runner "arc-runner-set-gpu". Mantido em sincronia
+# manual com ~/gpu-runner-values.yaml no host (esse arquivo é aplicado
+# lá, não a partir do repo):
+#
+#   helm upgrade --install arc-runner-set-gpu \
+#     oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set \
+#     -n arc-runners -f gpu-runner-values.yaml
+#
+# `resources.limits.nvidia.com/gpu: 1` faz o scheduler do Kubernetes
+# reservar de verdade a RTX 3050 pra este pod (via
+# nvidia-device-plugin.yaml, o DaemonSet oficial da NVIDIA aplicado com
+# kubectl — sem GPU Operator/Helm) — isso resolve a parte de "não deixar
+# dois pods disputarem a mesma GPU ao mesmo tempo".
+#
+# MAS: o `docker build`/`docker run --gpus all` que os workflows chamam
+# não passa por essa reserva — o volume `docker-sock` aponta pro socket
+# do Docker do NODE (que por sua vez, via kind-gpu-config.yaml, é o
+# próprio Docker do host físico). Ou seja, o container de treino em si
+# roda fora do agendamento do Kubernetes, direto no daemon do host; o
+# nvidia.com/gpu:1 daqui só garante um runner por vez no node, não que
+# o container de treino "pertença" a este pod do ponto de vista do k8s.
+# Isso é intencional pra manter `docker build`/`docker run` funcionando
+# como já funciona localmente — mas é a peça que ainda torna a alocação
+# "parcialmente virtual" (ver discussão no README).
+githubConfigUrl: "https://github.com/Lorkyrr/pytorch-gpu-sandbox"
+githubConfigSecret: pre-defined-secret
+
+template:
+  spec:
+    containers:
+      - name: runner
+        image: ghcr.io/actions/actions-runner:latest
+        command: ["/home/runner/run.sh"]
+        securityContext:
+          runAsUser: 0
+        env:
+          - name: RUNNER_ALLOW_RUNASROOT
+            value: "1"
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+        volumeMounts:
+          - name: docker-sock
+            mountPath: /var/run/docker.sock
+    volumes:
+      - name: docker-sock
+        hostPath:
+          path: /var/run/docker.sock
+          type: Socket

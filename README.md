@@ -58,6 +58,18 @@ Two real local training runs on this setup, logged in [`TESTE_DE_AMBIENTE_LOCAL_
 - Test 2 (more epochs, smaller batch size, lower initial LR) reached a slightly higher final accuracy than Test 1 (90.81% vs 89.40%), at the cost of roughly double the training time.
 - Both configurations fit comfortably within the RTX 3050's 4 GB of VRAM.
 
+## Running in CI on a real GPU (Kubernetes + Actions Runner Controller)
+
+Training/benchmarking also runs in GitHub Actions, on a **self-hosted runner backed by my own RTX 3050** — not a GitHub-hosted (virtual) runner, since GitHub doesn't offer GPU runners on the free tier and the whole point of this repo is exercising the real card.
+
+- [.github/workflows/pytorch-gpu.yaml](.github/workflows/pytorch-gpu.yaml) — manual (`workflow_dispatch`) workflow with a `mode` input (`benchmark` or `train`, plus `epochs`/`batch_size`/`lr` for training). It builds the [Dockerfile](Dockerfile) image on the runner and calls `docker run --gpus all`, same as running locally. Since the runner pod's Docker daemon doesn't share a filesystem with the pod (no bind mounts work), it pulls the trained checkpoint and the downloaded dataset back out of the container with `docker cp`, and caches `data/` via `actions/cache` so the ~170 MB CIFAR-10 download only happens once.
+- [.github/workflows/teste-gpu.yaml](.github/workflows/teste-gpu.yaml) — a minimal sanity check (`nvidia-smi` in a bare `nvidia/cuda` image) to confirm the runner can see the GPU at all, independent of this project's code.
+- [k8s/](k8s/) — the actual cluster config behind the `arc-runner-set-gpu` runner: [kind-gpu-config.yaml](k8s/kind-gpu-config.yaml) passes the RTX 3050 from the host into a [kind](https://kind.sigs.k8s.io/) node (NVIDIA Container Toolkit binaries + `default_runtime_name = "nvidia"` on containerd), [nvidia-device-plugin.yaml](k8s/nvidia-device-plugin.yaml) is a snapshot of the official [NVIDIA k8s-device-plugin](https://github.com/NVIDIA/k8s-device-plugin) DaemonSet (applied via plain `kubectl create -f <url>`, no Helm/GPU Operator) that turns that into a schedulable `nvidia.com/gpu` node resource — one real GPU, no time-slicing/virtual splitting — and [gpu-runner-values.yaml](k8s/gpu-runner-values.yaml) is the live [Actions Runner Controller](https://github.com/actions/actions-runner-controller) values for `arc-runner-set-gpu`, which requests `nvidia.com/gpu: 1` for the runner pod.
+
+**Known caveat:** `gpu-runner-values.yaml` also bind-mounts the host's Docker socket into the runner pod, and that's what `docker build`/`docker run --gpus all` in the workflow actually talks to. So while the runner *pod* has a proper, Kubernetes-scheduled GPU reservation, the training container the workflow spins up runs against the host's Docker daemon directly, outside that reservation — closer to the host GPU being reached "through" the pod than the pod owning it. Tightening that (e.g. moving training to run natively inside the already GPU-scheduled runner pod, dropping the docker socket entirely) is a possible next step, not yet done.
+
+`k8s/*.yaml` here mirror what's applied on the actual host/cluster (`~/kind-gpu-config.yaml`, `~/gpu-runner-values.yaml`) — they're kept in sync manually, not applied automatically from the repo.
+
 ## Requirements
 
 - Docker with NVIDIA Container Toolkit installed (for GPU access)
@@ -105,3 +117,8 @@ Note: `requirements.txt` is currently empty — populate it with `pip freeze > r
 - [compose.yaml](compose.yaml) — runs the container with GPU access
 - [compose.debug.yaml](compose.debug.yaml) — runs the container with `debugpy` for remote debugging
 - [TESTE_DE_AMBIENTE_LOCAL_1.txt](TESTE_DE_AMBIENTE_LOCAL_1.txt) / [TESTE_DE_AMBIENTE_LOCAL_2.txt](TESTE_DE_AMBIENTE_LOCAL_2.txt) — real output logs from two local training runs (see [Local test results](#local-test-results))
+- [.github/workflows/pytorch-gpu.yaml](.github/workflows/pytorch-gpu.yaml) — runs benchmark/train in CI on the real RTX 3050 (see [Running in CI on a real GPU](#running-in-ci-on-a-real-gpu-kubernetes--actions-runner-controller))
+- [.github/workflows/teste-gpu.yaml](.github/workflows/teste-gpu.yaml) — minimal GPU-visibility sanity check for the self-hosted runner
+- [k8s/kind-gpu-config.yaml](k8s/kind-gpu-config.yaml) — kind cluster config that passes the RTX 3050 through from the host
+- [k8s/nvidia-device-plugin.yaml](k8s/nvidia-device-plugin.yaml) — snapshot of the NVIDIA k8s-device-plugin DaemonSet applied to the cluster
+- [k8s/gpu-runner-values.yaml](k8s/gpu-runner-values.yaml) — live Helm values for the `arc-runner-set-gpu` Actions Runner Controller runner
