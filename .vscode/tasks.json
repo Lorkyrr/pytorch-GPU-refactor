@@ -1,0 +1,97 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Docker Compose: benchmark",
+      "type": "shell",
+      "command": "docker compose up --build",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "Docker Compose: treinar (30 épocas)",
+      "type": "shell",
+      "command": "docker compose run --rm app python3 main.py train --epochs 30",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      // Usada como preLaunchTask pela config de attach em launch.json.
+      // O problemMatcher "background" observa o marcador que
+      // compose.debug.yaml agora imprime ("[debugpy] pronto para
+      // anexar") pra só liberar o attach quando o debugpy já estiver
+      // escutando — sem isso o VS Code tentaria conectar cedo demais,
+      // ainda durante o build/pip install.
+      "label": "Docker Compose: subir debug",
+      "type": "shell",
+      "command": "docker compose -f compose.debug.yaml up --build",
+      "isBackground": true,
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^-noop-$",
+          "file": 1,
+          "location": 2,
+          "message": 3
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "\\[debugpy\\] pronto para anexar"
+        }
+      }
+    },
+    {
+      "label": "K8s: criar cluster GPU",
+      "detail": "Recria o cluster kind com suporte a GPU (DESTRUTIVO: apaga o cluster kind atual)",
+      "type": "shell",
+      "command": "bash \"${workspaceFolder}/../1-create-gpu-cluster.sh\"",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "K8s: configurar ARC (device plugin + runners)",
+      "detail": "Instala device plugin, controller do ARC e os runner sets (com e sem GPU)",
+      "type": "shell",
+      "command": "bash \"${workspaceFolder}/../2-setup-arc.sh\" Lorkyrr/pytorch-gpu-sandbox",
+      "options": {
+        "env": { "GITHUB_TOKEN": "${input:githubToken}" }
+      },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "K8s: recriar cluster do zero (criar + configurar ARC)",
+      "detail": "Roda os dois passos acima em sequência — só pede o token uma vez",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "K8s: criar cluster GPU",
+        "K8s: configurar ARC (device plugin + runners)"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "K8s: derrubar cluster",
+      "detail": "Libera GPU/RAM/CPU — os values.yaml ficam salvos pra próxima vez",
+      "type": "shell",
+      "command": "bash \"${workspaceFolder}/../3-teardown-cluster.sh\"",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "K8s: ver pods do ARC",
+      "type": "shell",
+      "command": "kubectl get pods -n arc-systems",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "githubToken",
+      "type": "promptString",
+      "description": "GITHUB_TOKEN fine-grained (Administration: Read and write no repo) — só é pedido ao (re)criar o cluster",
+      "password": true
+    }
+  ]
+}

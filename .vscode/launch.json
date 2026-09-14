@@ -1,0 +1,24 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Anexar ao container (Docker debug)",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": { "host": "localhost", "port": 5678 },
+      "pathMappings": [
+        { "localRoot": "${workspaceFolder}", "remoteRoot": "/app" }
+      ],
+      "preLaunchTask": "Docker Compose: subir debug",
+      "justMyCode": true
+    },
+    {
+      "name": "Python: Arquivo atual (local, sem Docker)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}

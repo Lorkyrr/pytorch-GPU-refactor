@@ -104,13 +104,15 @@ docker compose run --rm app python3 main.py train --epochs 30
 
 ## Debugging
 
-[compose.debug.yaml](compose.debug.yaml) starts the app under `debugpy`, listening on port `5678`, so you can attach a remote debugger (e.g. VS Code's "Python: Remote Attach") before execution continues:
+[compose.debug.yaml](compose.debug.yaml) starts the app under `debugpy`, listening on port `5678`, so you can attach a remote debugger before execution continues:
 
 ```bash
 docker compose -f compose.debug.yaml up --build
 ```
 
 Unlike `compose.yaml`, this variant requests no GPU device and mounts no volume, so it runs CPU-only and doesn't persist `./data`/checkpoints back to the host — see the comments in [compose.debug.yaml](compose.debug.yaml) if you need to debug with real CUDA.
+
+**In VS Code**, this is wired up end to end: press F5 and pick "Python: Anexar ao container (Docker debug)" — its `preLaunchTask` ([.vscode/tasks.json](.vscode/tasks.json)) runs the command above for you and waits for a `[debugpy] pronto para anexar` marker before attaching, so you don't have to time it by hand. [.vscode/tasks.json](.vscode/tasks.json) also has tasks for the plain benchmark/train Docker Compose commands above, and for the cluster lifecycle scripts (see [Running in CI on a real GPU](#running-in-ci-on-a-real-gpu-kubernetes--actions-runner-controller)) — "K8s: criar cluster GPU", "K8s: configurar ARC", "K8s: recriar cluster do zero" (both in sequence, prompting once for `GITHUB_TOKEN`), and "K8s: derrubar cluster".
 
 ## Running without Docker
 
@@ -129,6 +131,7 @@ python main.py
 - [Dockerfile](Dockerfile) — builds on `pytorch/pytorch:latest` and installs torchvision/torchaudio
 - [compose.yaml](compose.yaml) — runs the container with GPU access
 - [compose.debug.yaml](compose.debug.yaml) — runs the container with `debugpy` for remote debugging
+- [.vscode/launch.json](.vscode/launch.json) / [.vscode/tasks.json](.vscode/tasks.json) — VS Code debug config and tasks tying together Docker Compose and the cluster lifecycle scripts (see [Debugging](#debugging))
 - [TESTE_DE_AMBIENTE_LOCAL_1.txt](TESTE_DE_AMBIENTE_LOCAL_1.txt) / [TESTE_DE_AMBIENTE_LOCAL_2.txt](TESTE_DE_AMBIENTE_LOCAL_2.txt) — real output logs from two local training runs (see [Local test results](#local-test-results))
 - [.github/workflows/pytorch-gpu-python.yaml](.github/workflows/pytorch-gpu-python.yaml) — runs benchmark/train in CI natively on the real RTX 3050, no Docker (current default; see [Running in CI on a real GPU](#running-in-ci-on-a-real-gpu-kubernetes--actions-runner-controller))
 - [.github/workflows/pytorch-gpu-docker.yaml](.github/workflows/pytorch-gpu-docker.yaml) — same, via `docker build`/`docker run --gpus all` (reference/fallback variant)
