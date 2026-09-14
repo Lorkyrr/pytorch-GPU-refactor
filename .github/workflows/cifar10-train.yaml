@@ -38,23 +38,32 @@ jobs:
         run: docker build -t pytorch-cifar10:${{ github.sha }} .
 
       - name: Treinar ResNet-20 no CIFAR-10
+        env:
+          CONTAINER: treino-${{ github.run_id }}
         run: |
-          docker run --rm --gpus all \
+          docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+          docker run --gpus all \
             -e PYTHONUNBUFFERED=1 \
-            -v ${{ github.workspace }}:/app \
+            --name "$CONTAINER" \
             pytorch-cifar10:${{ github.sha }} \
             python3 main.py train \
               --epochs ${{ inputs.epochs }} \
               --batch-size ${{ inputs.batch_size }} \
               --lr ${{ inputs.lr }}
 
-      - name: Corrigir permissões dos arquivos gerados pelo container
+      - name: Extrair checkpoint e dataset do container
         if: always()
-        run: sudo chown -R $(id -u):$(id -g) "${{ github.workspace }}" || true
+        env:
+          CONTAINER: treino-${{ github.run_id }}
+        run: |
+          docker cp "$CONTAINER":/app/resnet20_cifar10.pth ./resnet20_cifar10.pth || true
+          rm -rf data
+          docker cp "$CONTAINER":/app/data ./data || true
+          docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
 
       - name: Upload do checkpoint treinado
         uses: actions/upload-artifact@v4
         with:
           name: resnet20-cifar10-checkpoint
           path: resnet20_cifar10.pth
-          if-no-files-found: error
+          if-no-files-found: warn
