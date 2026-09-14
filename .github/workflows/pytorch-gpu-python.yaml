@@ -1,4 +1,4 @@
-name: PyTorch GPU (CIFAR-10)
+name: PyTorch GPU (CIFAR-10) - Python
 
 on:
   workflow_dispatch:
