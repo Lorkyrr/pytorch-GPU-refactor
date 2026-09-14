@@ -62,13 +62,24 @@ Two real local training runs on this setup, logged in [`TESTE_DE_AMBIENTE_LOCAL_
 
 Training/benchmarking also runs in GitHub Actions, on a **self-hosted runner backed by my own RTX 3050** — not a GitHub-hosted (virtual) runner, since GitHub doesn't offer GPU runners on the free tier and the whole point of this repo is exercising the real card.
 
-- [.github/workflows/pytorch-gpu-python.yaml](.github/workflows/pytorch-gpu-python.yaml) — manual (`workflow_dispatch`) workflow with a `mode` input (`benchmark` or `train`, plus `epochs`/`batch_size`/`lr` for training). It runs `python3 main.py ...` **natively inside the runner pod** — no Docker involved. `data/` is cached via `actions/cache` so the ~170 MB CIFAR-10 download only happens once, and the checkpoint lands directly at `resnet20_cifar10.pth` in the job workspace (no extraction step needed, unlike the Docker-based version this replaced).
-- [.github/workflows/teste-gpu.yaml](.github/workflows/teste-gpu.yaml) — a minimal sanity check (`nvidia-smi`, called directly) to confirm the runner pod can see the GPU at all, independent of this project's code.
-- [k8s/](k8s/) — the cluster config behind the `arc-runner-set-gpu` runner: [kind-gpu-config.yaml](k8s/kind-gpu-config.yaml) passes the RTX 3050 from the host into a [kind](https://kind.sigs.k8s.io/) node (NVIDIA Container Toolkit binaries + `default_runtime_name = "nvidia"` on containerd), [nvidia-device-plugin.yaml](k8s/nvidia-device-plugin.yaml) is a snapshot of the official [NVIDIA k8s-device-plugin](https://github.com/NVIDIA/k8s-device-plugin) DaemonSet (applied via plain `kubectl create -f <url>`, no Helm/GPU Operator) that turns that into a schedulable `nvidia.com/gpu` node resource — one real GPU, no time-slicing/virtual splitting — [gpu-runner-values.yaml](k8s/gpu-runner-values.yaml) is the [Actions Runner Controller](https://github.com/actions/actions-runner-controller) values for `arc-runner-set-gpu`, requesting `nvidia.com/gpu: 1` for the runner pod, and [runner-image/Dockerfile](k8s/runner-image/Dockerfile) builds the custom runner image (Python + PyTorch/CUDA baked in) that `gpu-runner-values.yaml` points at.
+There are two workflow variants, kept side by side under different names so both can live in the repo at once — **only one can actually succeed at a time**, though, since they need different config applied to the single `arc-runner-set-gpu` deployment (see below):
 
-This is a change from an earlier version of this setup where the workflow ran `docker build`/`docker run --gpus all` through the host's Docker socket bind-mounted into the runner pod — that worked, but the actual training container ran outside Kubernetes' scheduling entirely, so the pod's `nvidia.com/gpu: 1` reservation didn't really correspond to what was using the GPU. Running `python3 main.py` directly inside the same pod that reserved the GPU closes that gap: no Docker, no socket, one process, one real allocated GPU.
+- [.github/workflows/pytorch-gpu-python.yaml](.github/workflows/pytorch-gpu-python.yaml) **(current/default)** — runs `python3 main.py ...` **natively inside the runner pod**, no Docker involved. Needs [k8s/gpu-runner-values.yaml](k8s/gpu-runner-values.yaml) applied to the cluster: the runner pod's own image bundles Python/PyTorch (built from [k8s/runner-image/Dockerfile](k8s/runner-image/Dockerfile)), and it's that same pod's `nvidia.com/gpu: 1` reservation that's actually used to train — no Docker, no socket, one process, one real allocated GPU.
+- [.github/workflows/pytorch-gpu-docker.yaml](.github/workflows/pytorch-gpu-docker.yaml) — the earlier approach: builds the [Dockerfile](Dockerfile) image on the runner and calls `docker run --gpus all`, pulling the checkpoint/dataset back out with `docker cp` (its Docker daemon doesn't share the pod's filesystem, so bind mounts don't work). Needs [k8s/gpu-runner-values.docker.yaml](k8s/gpu-runner-values.docker.yaml) applied instead: it bind-mounts the host's Docker socket into the pod. Kept as a reference/fallback — its actual training container runs against the host's Docker daemon directly, outside the pod's own GPU reservation, so the `nvidia.com/gpu: 1` limit there doesn't really correspond to what's using the GPU.
+- [.github/workflows/teste-gpu.yaml](.github/workflows/teste-gpu.yaml) — a minimal sanity check (`nvidia-smi`, called directly, no Docker) to confirm the runner pod can see the GPU at all. Works under either of the two configs above, since both request `nvidia.com/gpu: 1` on the runner pod.
 
-`k8s/kind-gpu-config.yaml` and `k8s/gpu-runner-values.yaml` describe the **target** state for this branch — they need to be applied to the actual cluster (build + push `runner-image/Dockerfile`, update the `image:` field, then `helm upgrade` with the new values) to take effect; they're kept in sync with the host manually, not applied automatically from the repo.
+Both `k8s/gpu-runner-values*.yaml` files request the same `nvidia.com/gpu: 1` from Kubernetes — what differs is what the pod's container actually does with it. To switch which workflow variant is live:
+
+```bash
+helm upgrade --install arc-runner-set-gpu \
+  oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set \
+  -n arc-runners -f k8s/gpu-runner-values.yaml           # python (default)
+  # -f k8s/gpu-runner-values.docker.yaml                 # or: docker
+```
+
+- [k8s/](k8s/) — the rest of the cluster config behind `arc-runner-set-gpu`: [kind-gpu-config.yaml](k8s/kind-gpu-config.yaml) passes the RTX 3050 from the host into a [kind](https://kind.sigs.k8s.io/) node (NVIDIA Container Toolkit binaries + `default_runtime_name = "nvidia"` on containerd), and [nvidia-device-plugin.yaml](k8s/nvidia-device-plugin.yaml) is a snapshot of the official [NVIDIA k8s-device-plugin](https://github.com/NVIDIA/k8s-device-plugin) DaemonSet (applied via plain `kubectl create -f <url>`, no Helm/GPU Operator) that turns that into a schedulable `nvidia.com/gpu` node resource — one real GPU, no time-slicing/virtual splitting.
+
+These `k8s/*.yaml` files describe the intended cluster state — they need to be applied by hand (`helm upgrade`/`kubectl apply`) to take effect; they're kept in sync with the host manually, not applied automatically from the repo. `k8s/gpu-runner-values.yaml` also still points `image:` at a placeholder (`<seu-registry>/pytorch-gpu-sandbox-runner:latest`) — build and push `k8s/runner-image/Dockerfile` and update that field before relying on it; until then, `pytorch-gpu-python.yaml` falls back to `pip install --user -r requirements.txt` at the start of the job.
 
 ## Requirements
 
@@ -117,9 +128,11 @@ python main.py
 - [compose.yaml](compose.yaml) — runs the container with GPU access
 - [compose.debug.yaml](compose.debug.yaml) — runs the container with `debugpy` for remote debugging
 - [TESTE_DE_AMBIENTE_LOCAL_1.txt](TESTE_DE_AMBIENTE_LOCAL_1.txt) / [TESTE_DE_AMBIENTE_LOCAL_2.txt](TESTE_DE_AMBIENTE_LOCAL_2.txt) — real output logs from two local training runs (see [Local test results](#local-test-results))
-- [.github/workflows/pytorch-gpu-python.yaml](.github/workflows/pytorch-gpu-python.yaml) — runs benchmark/train in CI on the real RTX 3050 (see [Running in CI on a real GPU](#running-in-ci-on-a-real-gpu-kubernetes--actions-runner-controller))
+- [.github/workflows/pytorch-gpu-python.yaml](.github/workflows/pytorch-gpu-python.yaml) — runs benchmark/train in CI natively on the real RTX 3050, no Docker (current default; see [Running in CI on a real GPU](#running-in-ci-on-a-real-gpu-kubernetes--actions-runner-controller))
+- [.github/workflows/pytorch-gpu-docker.yaml](.github/workflows/pytorch-gpu-docker.yaml) — same, via `docker build`/`docker run --gpus all` (reference/fallback variant)
 - [.github/workflows/teste-gpu.yaml](.github/workflows/teste-gpu.yaml) — minimal GPU-visibility sanity check for the self-hosted runner
 - [k8s/kind-gpu-config.yaml](k8s/kind-gpu-config.yaml) — kind cluster config that passes the RTX 3050 through from the host
 - [k8s/nvidia-device-plugin.yaml](k8s/nvidia-device-plugin.yaml) — snapshot of the NVIDIA k8s-device-plugin DaemonSet applied to the cluster
-- [k8s/gpu-runner-values.yaml](k8s/gpu-runner-values.yaml) — Helm values for the `arc-runner-set-gpu` Actions Runner Controller runner
+- [k8s/gpu-runner-values.yaml](k8s/gpu-runner-values.yaml) — Helm values for `arc-runner-set-gpu` matching the Python workflow (current default)
+- [k8s/gpu-runner-values.docker.yaml](k8s/gpu-runner-values.docker.yaml) — Helm values matching the Docker workflow instead
 - [k8s/runner-image/Dockerfile](k8s/runner-image/Dockerfile) — custom runner image (Python + PyTorch/CUDA) so CI runs `main.py` natively, no Docker-in-CI
