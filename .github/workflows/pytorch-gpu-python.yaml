@@ -48,11 +48,15 @@ jobs:
       # Enquanto k8s/runner-image/Dockerfile não é publicado (ver TODO em
       # k8s/gpu-runner-values.yaml), o pod ainda sobe com a imagem padrão
       # do runner, sem PyTorch — daí o "ModuleNotFoundError: No module
-      # named 'torch'". Instala em --user pra funcionar mesmo sem root
-      # (não há mais runAsUser: 0 no values.yaml).
+      # named 'torch'". O python3 dessa imagem (base Debian/Ubuntu) nem
+      # tem pip embutido ("No module named pip": Debian/Ubuntu removem o
+      # ensurepip do pacote python3 de propósito), e não temos mais root
+      # pra instalar via apt (sem runAsUser: 0 no values.yaml) — por isso
+      # o bootstrap via get-pip.py oficial do PyPA, em modo --user.
       - name: Instalar dependências Python
         run: |
-          python3 -m pip install --upgrade pip
+          curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
+          python3 /tmp/get-pip.py --user
           python3 -m pip install --user -r requirements.txt
 
       - name: Cache do dataset CIFAR-10
