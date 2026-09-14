@@ -1,11 +1,12 @@
-# Values reais do chart gha-runner-scale-set (Actions Runner Controller)
-# usadas para subir o runner "arc-runner-set-gpu". Mantido em sincronia
-# manual com ~/gpu-runner-values.yaml no host (esse arquivo é aplicado
-# lá, não a partir do repo):
+# Variante DOCKER dos values do gha-runner-scale-set — usada pelo
+# workflow .github/workflows/pytorch-gpu-docker.yaml. Não é a config
+# aplicada por padrão neste repo (essa é k8s/gpu-runner-values.yaml, a
+# versão Python nativa); guardada aqui pra poder voltar a rodar o
+# workflow Docker sem reconstruir isso do zero:
 #
 #   helm upgrade --install arc-runner-set-gpu \
 #     oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set \
-#     -n arc-runners -f gpu-runner-values.yaml
+#     -n arc-runners -f k8s/gpu-runner-values.docker.yaml
 #
 # `resources.limits.nvidia.com/gpu: 1` faz o scheduler do Kubernetes
 # reservar de verdade a RTX 3050 pra este pod (via

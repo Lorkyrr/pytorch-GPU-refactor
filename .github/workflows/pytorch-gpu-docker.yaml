@@ -1,4 +1,4 @@
-name: PyTorch GPU (CIFAR-10)
+name: PyTorch GPU (CIFAR-10) - Docker
 
 on:
   workflow_dispatch:
@@ -33,6 +33,14 @@ jobs:
     # Roda no runner self-hosted (ARC) com a RTX 3050 real alocada via
     # Kubernetes device plugin (nvidia.com/gpu) — ver k8s/. Nada aqui
     # depende de runner hospedado pela GitHub.
+    #
+    # PRECISA do socket do Docker montado no pod (ver
+    # k8s/gpu-runner-values.docker.yaml) — a imagem do runner usada por
+    # pytorch-gpu-python.yaml (k8s/runner-image/) não tem `docker` CLI
+    # nem o socket, então este workflow só funciona enquanto o cluster
+    # estiver com k8s/gpu-runner-values.docker.yaml aplicado, não com
+    # k8s/gpu-runner-values.yaml (a versão nativa em Python, que é a
+    # aplicada por padrão neste repo).
     runs-on: arc-runner-set-gpu
     timeout-minutes: 120
     steps:
