@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+#
 # Imagem do runner do ARC (arc-runner-set-gpu) com Python + PyTorch/CUDA
 # já instalados, pra rodar main.py NATIVAMENTE dentro do pod do runner —
 # sem Docker aninhado, sem socket do host. A GPU chega sozinha: o pod
@@ -25,7 +27,16 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /tmp/requirements.txt
-RUN pip3 install --no-cache-dir -r /tmp/requirements.txt && \
+# Wheels de torch com CUDA passam de 500MB cada, e numa conexão lenta o
+# download de um único wheel pode ultrapassar o timeout padrão do pip
+# (ver capítulo 12 do SAGA-DA-RTX3050.md) mesmo com --timeout generoso.
+# --mount=type=cache mantém o cache HTTP do pip (/root/.cache/pip) entre
+# tentativas de build (mesmo builder, mesmo host) — se o build falhar no
+# meio (ex: um wheel específico não termina de baixar) e for repetido, os
+# pacotes que já baixaram com sucesso não precisam ser baixados de novo.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip3 install --break-system-packages \
+    --timeout 600 --retries 20 -r /tmp/requirements.txt && \
     rm /tmp/requirements.txt
 
 USER runner
