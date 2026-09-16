@@ -1,0 +1,46 @@
+name: Validação do repositório
+
+# Roda no runner HOSPEDADO do GitHub, de propósito: isso não é treinamento
+# nem workbench de GPU (esse trabalho é todo self-hosted, ver
+# pytorch-gpu-python.yaml e pytorch-gpu-docker.yaml). É só uma tarefa leve e
+# rápida — lint + os testes que não dependem de torch — pra validar que o
+# repositório está sintaticamente e logicamente são a cada push/PR, sem
+# precisar da RTX 3050 real pra isso.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["main"]
+
+concurrency:
+  group: validacao-repositorio-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: requirements-dev.txt
+
+      # De propósito: só requirements-dev.txt aqui, nunca requirements.txt.
+      # torch/torchvision/torchaudio não entram no runner hospedado — os
+      # testes que precisam deles (tests/test_resnet.py) usam
+      # pytest.importorskip("torch") e são pulados sem falhar.
+      - name: Instalar dependências de desenvolvimento
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Testes unitários (sem GPU/torch)
+        run: pytest -v

@@ -4,25 +4,39 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A learning project (author is a beginner) to practice PyTorch, GPU/CUDA programming, and Docker/Kubernetes. It's a single-script repo: [main.py](main.py) has two modes:
+A learning project (author is a beginner) to practice PyTorch, GPU/CUDA programming, and Docker/Kubernetes. The app was originally one script; it's now a small package, [pytorch_gpu_sandbox/](pytorch_gpu_sandbox/), with [main.py](main.py) reduced to a thin entrypoint (`from pytorch_gpu_sandbox.cli import main`). Two modes:
 
 - `benchmark` (default) — GPU/CUDA/cuDNN sanity checks and micro-benchmarks (matmul, conv2d, mixed precision, a simulated training loop)
-- `train` — trains a from-scratch ResNet-20 (He et al., 2015 CIFAR variant, not `torchvision.models`) on CIFAR-10
+- `train` — trains a from-scratch ResNet (He et al., 2015 CIFAR variant, not `torchvision.models`) on CIFAR-10, with a selectable depth via `--arquitetura` (`resnet20`/`resnet56`/`resnet110`) and **real** AMP mixed precision in the training loop (`--sem-amp` to disable)
 
-Comments and console output in `main.py` are in Portuguese; keep that convention when editing it. License is MIT (see [LICENSE](LICENSE)).
+Comments and console output are in Portuguese; keep that convention when editing this codebase. There's now a `tests/` suite (pytest) and `ruff` for linting — see "Commands" below. License is MIT (see [LICENSE](LICENSE)).
 
 The companion doc [SAGA-DA-RTX3050.md](SAGA-DA-RTX3050.md) is a long-form, narrative "journal" of how the CI-on-real-GPU setup was built, chapter by chapter, including every bug hit along the way and how it was diagnosed — read it when you need the *story* behind a decision. This file (CLAUDE.md) is the dense, structured reference for working in the repo day to day; the gotchas table near the end of the K8s section below is a condensed extract of the SAGA's hard-won lessons, kept here so you don't have to read 900+ lines to avoid repeating a mistake that's already been solved once. [no-AI.md](no-AI.md) is the opposite of both: a from-scratch roadmap (official docs + self-verification, no pasted answers) for reproducing this whole project by hand instead of with an AI assistant.
 
 ## Repository map
 
 ```
-main.py                        # the whole application (benchmark + train modes)
+main.py                        # thin entrypoint: from pytorch_gpu_sandbox.cli import main
+pytorch_gpu_sandbox/            # the application package
+  constants.py                   # every magic number (matmul sizes, LR, CIFAR stats, ResNet variants...)
+  formatting.py                  # console presentation helpers (linha/titulo/secao) — no logic
+  metrics.py                     # gflops_matmul — deliberately torch-free (see "Testing" below)
+  environment.py                 # info_ambiente(): CUDA/cuDNN/GPU detection + report
+  benchmarks.py                  # the 4 benchmark-mode tests + executar_benchmark()
+  data.py                        # cifar10_dataloaders(): CIFAR-10 download + transforms
+  training.py                    # train loop, eval loop, treinar_resnet_cifar10() — real AMP lives here
+  cli.py                         # argparse + dispatch (benchmark|train), the old main()
+  models/
+    resnet.py                     # BlocoResidual, ResNetCIFAR, construir_resnet_cifar()
+tests/                           # pytest suite — see "Testing" below
+pyproject.toml                  # ruff + pytest config
 requirements.txt                # torch, torchvision, torchaudio — unpinned
+requirements-dev.txt            # pytest, ruff — dev-only, deliberately separate from requirements.txt
 Dockerfile                      # pytorch/pytorch:latest + torchvision/torchaudio
 compose.yaml                    # local dev: GPU access + bind mount
 compose.debug.yaml              # debugpy variant: CPU-only, no bind mount
 .dockerignore                   # Python-specific; excludes data/, *.pth, compose/Dockerfile files
-.gitignore                      # .venv/, data/, *.pth, __pycache__
+.gitignore                      # .venv/, data/, *.pth, __pycache__, .ruff_cache/, .pytest_cache/
 README.md                       # user-facing docs, host tool versions, project layout
 SAGA-DA-RTX3050.md              # narrative build log of the K8s/ARC CI setup (18 chapters)
 no-AI.md                        # roadmap to rebuild this project by hand, without an AI assistant
@@ -31,9 +45,10 @@ testes-de-ambiente/             # raw console output from 2 real local training 
   TESTE_DE_AMBIENTE_LOCAL_1.txt
   TESTE_DE_AMBIENTE_LOCAL_2.txt
 .github/workflows/
-  pytorch-gpu-python.yaml       # current/default CI workflow — native python3, no Docker
-  pytorch-gpu-docker.yaml       # reference/fallback CI workflow — docker build/run
+  pytorch-gpu-python.yaml       # current/default CI workflow — native python3, no Docker, self-hosted GPU
+  pytorch-gpu-docker.yaml       # reference/fallback CI workflow — docker build/run, self-hosted GPU
   teste-gpu.yaml                # minimal nvidia-smi sanity check
+  validacao-repositorio.yaml    # GitHub-hosted runner: lint + torch-free tests only, no GPU/training
 k8s/
   kind-gpu-config.yaml          # kind cluster config: passes host RTX 3050 into the node
   nvidia-device-plugin.yaml     # pinned snapshot of NVIDIA's k8s-device-plugin DaemonSet
@@ -66,9 +81,25 @@ Without Docker (requires a local CUDA-enabled PyTorch):
 pip install -r requirements.txt
 python main.py                 # benchmark
 python main.py train --epochs 30 --batch-size 128 --lr 0.1 --data-dir ./data
+python main.py train --arquitetura resnet56 --seed 42     # deeper model + real AMP (default), reproducible
+python main.py train --sem-amp                            # opt out of AMP, exact old FP32 behavior
 ```
 
-There is no test suite, linter, or formatter configured in this repo.
+### Testing and linting
+
+No GPU or CUDA needed — `tests/test_resnet.py` uses `pytest.importorskip("torch")` and is skipped
+automatically wherever `torch` isn't installed (that's deliberate, not a gap — see
+[validacao-repositorio.yaml](.github/workflows/validacao-repositorio.yaml) below).
+
+```bash
+pip install -r requirements-dev.txt
+ruff check .     # lint
+pytest -v        # tests/test_formatting.py + tests/test_metrics.py always run; tests/test_resnet.py needs torch
+```
+
+`gflops_matmul` lives in `pytorch_gpu_sandbox/metrics.py`, not `benchmarks.py`, on purpose:
+`benchmarks.py` does `import torch` at module level (needed for the other 4 tests), which would make
+even this pure-math function impossible to import — let alone test — without a full torch install.
 
 ### Host tool versions this was built/tested against
 
@@ -76,27 +107,30 @@ Full table with "installed via" notes lives in [README.md](README.md#host-enviro
 
 ## Architecture
 
-### main.py layout
+### pytorch_gpu_sandbox/ package layout
 
-Single-file app, dispatch via `main()` on the positional `modo` argument (`benchmark`|`train`, default `benchmark`). CLI flags `--epochs` (30), `--batch-size` (128), `--lr` (0.1), `--data-dir` (`./data`) only apply to `train` mode.
+`main.py` is a thin entrypoint; dispatch via `cli.main()` on the positional `modo` argument (`benchmark`|`train`, default `benchmark`). CLI flags `--epochs` (30), `--batch-size` (128), `--lr` (0.1), `--data-dir` (`./data`), `--arquitetura` (`resnet20`, default), `--sem-amp`, `--seed` only apply to `train` mode.
 
-**Benchmark mode** (`executar_benchmark`, runs these in sequence):
-1. `info_ambiente()` — prints PyTorch version, `torch.version.cuda`, CUDA availability, cuDNN enabled/version, GPU name, total VRAM, compute capability, SM count, and whether Tensor Cores are supported (compute capability >= 7.0). Falls back to CPU with a warning if CUDA isn't available (the FP16 test is then skipped, everything else still runs).
-2. `teste_matmul(device)` — cuBLAS test: `torch.mm` at N x N for N in `[1000, 2000, 4000, 6000]`, timed with `torch.cuda.synchronize()` around it, reports elapsed time and estimated GFLOPS (`2*N^3/time`). Each size is wrapped in `try/except RuntimeError` so an OOM on a larger size doesn't kill the run — it just prints "[FALHOU]" and calls `torch.cuda.empty_cache()`.
-3. `teste_convolucao(device)` — cuDNN test: a 2-layer `Conv2d(3→64)→ReLU→Conv2d(64→128)→ReLU→MaxPool2d` stack over a batch of 16 224x224 images, one untimed warm-up pass (cuDNN's algorithm-selection overhead on the first call would otherwise skew the timing), then 20 timed repetitions; reports avg latency and images/sec throughput.
-4. `teste_precisao_mista(device)` — compares a 4000x4000 `torch.mm` in FP32 vs. inside `torch.autocast(device_type="cuda", dtype=torch.float16)`, reports the speedup ratio. Skipped entirely on CPU (`device.type != "cuda"`).
-5. `teste_treino_simulado(device)` — a tiny CNN (`Conv2d→ReLU→Conv2d→ReLU→MaxPool2d→Flatten→LazyLinear(256)→ReLU→Linear(256,10)`) trained for 30 steps with Adam (lr=1e-3) on random 64x64 batches of 32, one warm-up step, reports step latency, throughput, and final loss.
+**Benchmark mode** (`benchmarks.executar_benchmark`, runs these in sequence):
+1. `environment.info_ambiente()` — prints PyTorch version, `torch.version.cuda`, CUDA availability, cuDNN enabled/version, GPU name, total VRAM, compute capability, SM count, and whether Tensor Cores are supported (compute capability >= 7.0, `constants.COMPUTE_CAPABILITY_MINIMA_TENSOR_CORES`). Falls back to CPU with a warning if CUDA isn't available (the FP16 test is then skipped, everything else still runs). The GPU metadata itself is collected into an `environment.InfoGPU` dataclass by `coletar_info_gpu()` — kept separate from the printing so the data-gathering isn't tangled up with console output.
+2. `benchmarks.teste_matmul(device)` — cuBLAS test: `torch.mm` at N x N for N in `constants.MATMUL_TAMANHOS` (`[1000, 2000, 4000, 6000]`), timed with `torch.cuda.synchronize()` around it, reports elapsed time and estimated GFLOPS via `metrics.gflops_matmul` (`2*N^3/time`). Each size is wrapped in `try/except RuntimeError` so an OOM on a larger size doesn't kill the run — it just prints "[FALHOU]" and calls `torch.cuda.empty_cache()`.
+3. `benchmarks.teste_convolucao(device)` — cuDNN test: a 2-layer `Conv2d(3→64)→ReLU→Conv2d(64→128)→ReLU→MaxPool2d` stack over a batch of 16 224x224 images, one untimed warm-up pass (cuDNN's algorithm-selection overhead on the first call would otherwise skew the timing), then 20 timed repetitions; reports avg latency and images/sec throughput.
+4. `benchmarks.teste_precisao_mista(device)` — compares a 4000x4000 `torch.mm` in FP32 vs. inside `torch.autocast(device_type="cuda", dtype=torch.float16)`, reports the speedup ratio. Skipped entirely on CPU (`device.type != "cuda"`). **This is an isolated micro-benchmark, unrelated to the real AMP now used in `training.py`** — don't confuse the two when reading the code.
+5. `benchmarks.teste_treino_simulado(device)` — a tiny CNN (`Conv2d→ReLU→Conv2d→ReLU→MaxPool2d→Flatten→LazyLinear(256)→ReLU→Linear(256,10)`) trained for 30 steps with Adam (lr=1e-3) on random 64x64 batches of 32, one warm-up step, reports step latency, throughput, and final loss.
 6. Wraps with GPU memory accounting: allocated/reserved before and after (`torch.cuda.memory_allocated/reserved`), plus `torch.cuda.max_memory_allocated()` as the peak.
 
-**Train mode** (`treinar_resnet_cifar10`):
-- **Model** — `resnet20_cifar()` builds `ResNetCIFAR(blocos_por_estagio=3)`, the 6n+2-layer CIFAR variant from the original ResNet paper (He et al., 2015), **not** `torchvision.models`:
+**Train mode** (`training.treinar_resnet_cifar10`):
+- **Model** — `models.resnet.construir_resnet_cifar(arquitetura, num_classes=10)` builds a `ResNetCIFAR`, the 6n+2-layer CIFAR variant from the original ResNet paper (He et al., 2015), **not** `torchvision.models`. `arquitetura` picks `blocos_por_estagio` (`n`) via `constants.RESNET_VARIANTES_BLOCOS`: `resnet20`→3 (default), `resnet56`→9, `resnet110`→18. Unknown names raise `ValueError`.
   - Stem: `Conv2d(3→16, 3x3, pad=1, bias=False) → BatchNorm2d → ReLU`.
-  - 3 stages of `n=3` `BlocoResidual` blocks each (9 blocks total, plus the stem = 20 weight layers): stage 1 stays at 16 channels/stride 1, stage 2 goes to 32 channels with stride 2 on its first block, stage 3 goes to 64 channels with stride 2 on its first block. Each `BlocoResidual` is `Conv3x3→BN→ReLU→Conv3x3→BN`, added to a shortcut that's an identity *unless* the stride != 1 or the channel count changes, in which case the shortcut is a `1x1 Conv (stride-matched) → BN` projection — standard ResNet "option B" shortcut.
+  - 3 stages of `n` `BlocoResidual` blocks each: stage 1 stays at 16 channels/stride 1, stage 2 goes to 32 channels with stride 2 on its first block, stage 3 goes to 64 channels with stride 2 on its first block. Each `BlocoResidual` is `Conv3x3→BN→ReLU→Conv3x3→BN`, added to a shortcut that's an identity *unless* the stride != 1 or the channel count changes, in which case the shortcut is a `1x1 Conv (stride-matched) → BN` projection — standard ResNet "option B" shortcut.
   - Head: `AdaptiveAvgPool2d(1) → Flatten → Linear(64→10)`.
-- **Data** (`cifar10_dataloaders`) — `torchvision.datasets.CIFAR10`, auto-downloads into `--data-dir` (default `./data`) on first run (~170–341 MB depending on source, taking up to ~19 minutes on a slow connection per real runs logged in `testes-de-ambiente/`). Per-channel normalization with fixed CIFAR-10 stats: mean `(0.4914, 0.4822, 0.4465)`, std `(0.2470, 0.2435, 0.2616)`. Train transform adds `RandomCrop(32, padding=4)` + `RandomHorizontalFlip()`; test transform is normalization only. `DataLoader` uses `pin_memory=True`, `num_workers=2`.
+  - Trainable parameter count is printed at the start of training (`sum(p.numel() for p in modelo.parameters() if p.requires_grad)`) — useful for eyeballing how much bigger `resnet56`/`resnet110` are before committing GPU time.
+- **Real mixed precision (AMP)** — `training.resolver_amp_habilitado(usar_amp, device)` returns `usar_amp and device.type == "cuda"` (CPU never gets AMP — no Tensor Cores to exploit). When enabled, `treinar_uma_epoca` wraps the forward pass in `torch.autocast(device_type=device.type, dtype=torch.float16, enabled=amp_habilitado)` and uses a `torch.amp.GradScaler(device="cuda", enabled=amp_habilitado)` around `backward()`/`step()` to prevent FP16 gradient underflow; `avaliar` autocasts the forward pass too (no scaler needed, no backward). When `amp_habilitado=False`, both the autocast context and the scaler are documented no-ops, so behavior is bit-for-bit the old FP32 path — that's how `--sem-amp` gets you back to the pre-AMP behavior exactly. The point of turning this on is letting a deeper model (`resnet56`/`resnet110`) fit the RTX 3050's 4 GB VRAM budget instead of just benchmarking Tensor Cores in isolation.
+- **Data** (`data.cifar10_dataloaders`) — `torchvision.datasets.CIFAR10`, auto-downloads into `--data-dir` (default `./data`) on first run (~170–341 MB depending on source, taking up to ~19 minutes on a slow connection per real runs logged in `testes-de-ambiente/`). Per-channel normalization with fixed CIFAR-10 stats: mean `(0.4914, 0.4822, 0.4465)`, std `(0.2470, 0.2435, 0.2616)`. Train transform adds `RandomCrop(32, padding=4)` + `RandomHorizontalFlip()`; test transform is normalization only. `DataLoader` uses `pin_memory=True`, `num_workers=2`.
 - **Optimizer/schedule** — SGD, momentum 0.9, nesterov, weight_decay 5e-4; `MultiStepLR` with milestones at 50% and 75% of total epochs, gamma 0.1 (two 10x LR drops).
-- **Checkpointing** — after every epoch, if test accuracy improved, saves `model.state_dict()` (not the full model) to `checkpoint_path` — not exposed as a CLI flag, hardcoded default `resnet20_cifar10.pth` at the repo root (gitignored).
-- Two real local runs are logged verbatim in `testes-de-ambiente/` — 30 epochs/bs128/lr0.1 reached 89.40% test accuracy in ~5.4 min; 50 epochs/bs64/lr0.05 reached 90.81% in ~9.5 min. Both fit comfortably in the RTX 3050's 4 GB VRAM.
+- **Reproducibility** — `--seed N` calls `torch.manual_seed(N)` before building the model/data; omitted by default (unchanged from the original, non-reproducible-by-default behavior).
+- **Checkpointing** — after every epoch, if test accuracy improved, saves `model.state_dict()` (not the full model) to `checkpoint_path`. Not exposed as a CLI flag; defaults to `f"{arquitetura}_cifar10.pth"` at the repo root (gitignored) — for the default `resnet20` this is still exactly `resnet20_cifar10.pth`, so existing tooling/expectations don't break, but `resnet56`/`resnet110` runs now get their own filename instead of colliding.
+- Two real local runs (pre-refactor, FP32, resnet20) are logged verbatim in `testes-de-ambiente/` — 30 epochs/bs128/lr0.1 reached 89.40% test accuracy in ~5.4 min; 50 epochs/bs64/lr0.05 reached 90.81% in ~9.5 min. Both fit comfortably in the RTX 3050's 4 GB VRAM.
 
 ### Docker / Compose
 
@@ -107,7 +141,9 @@ Single-file app, dispatch via `main()` on the positional `modo` argument (`bench
 
 ## CI on a real GPU (Kubernetes + Actions Runner Controller)
 
-CI doesn't use GitHub-hosted runners (no free GPU tier) — it runs on a **self-hosted runner backed by the author's own RTX 3050**, via Actions Runner Controller (ARC) on a local `kind` cluster. This is the part of the repo that requires reading multiple files together to understand.
+All GPU work — benchmark and training — runs on a **self-hosted runner backed by the author's own RTX 3050**, via Actions Runner Controller (ARC) on a local `kind` cluster; GitHub-hosted runners are deliberately never used for that (no free GPU tier, and the point is to keep training/benchmarking self-hosted). This is the part of the repo that requires reading multiple files together to understand.
+
+The one exception is [validacao-repositorio.yaml](.github/workflows/validacao-repositorio.yaml) — a small, fast job on a regular GitHub-hosted `ubuntu-latest` runner, triggered on every push/PR. It installs only `requirements-dev.txt` (never `requirements.txt` — no torch on this runner, on purpose) and runs `ruff check .` + `pytest -v`; `tests/test_resnet.py` auto-skips there via `pytest.importorskip("torch")`. It's a cheap sanity gate ("is the repo syntactically/logically sound"), not a substitute for the self-hosted GPU workflows below. Those, in turn, gained their own `pytest` step (with `torch` installed, so the full suite including ResNet/AMP tests runs) right after installing dependencies in [pytorch-gpu-python.yaml](.github/workflows/pytorch-gpu-python.yaml) — a fast fail-fast gate before spending time on the one physical GPU.
 
 ### The two workflow variants
 

@@ -2,10 +2,10 @@
 
 > **Learning project:** I'm a beginner, currently learning to program, and I'm using this repo to practice PyTorch, GPU/CUDA programming, and Docker on a real (if small) project. Feedback, corrections, and suggestions are very welcome!
 
-A diagnostic script that validates a local PyTorch + NVIDIA GPU setup (typically run inside a Docker container), plus a from-scratch ResNet-20 training pipeline on CIFAR-10. [main.py](main.py) supports two modes via a positional argument:
+A diagnostic tool that validates a local PyTorch + NVIDIA GPU setup (typically run inside a Docker container), plus a from-scratch ResNet training pipeline on CIFAR-10. The app is the [pytorch_gpu_sandbox/](pytorch_gpu_sandbox/) package; [main.py](main.py) is a thin entrypoint into it, and supports two modes via a positional argument:
 
 - `benchmark` (default) — GPU/CUDA/cuDNN sanity checks and micro-benchmarks
-- `train` — trains a ResNet-20 (He et al., 2015 CIFAR variant) on CIFAR-10
+- `train` — trains a ResNet (He et al., 2015 CIFAR variant; `resnet20`/`resnet56`/`resnet110` via `--arquitetura`) on CIFAR-10, with real mixed precision (AMP) in the loop
 
 ## Benchmark mode: what it does
 
@@ -21,17 +21,20 @@ If CUDA isn't available, the script still runs on CPU (skipping the FP16 test) s
 
 ## Train mode: what it does
 
-`python main.py train` trains a **ResNet-20** (the 6n+2 layer CIFAR architecture from the original ResNet paper, built from scratch with basic residual blocks — not `torchvision.models`) on **CIFAR-10**:
+`python main.py train` trains a **ResNet** (the 6n+2 layer CIFAR architecture from the original ResNet paper, built from scratch with basic residual blocks — not `torchvision.models`) on **CIFAR-10**:
 
 - Downloads CIFAR-10 into `./data` (via `torchvision.datasets.CIFAR10`) on first run
 - Standard augmentation: random crop (32, padding 4) + random horizontal flip, with per-channel normalization
 - SGD (momentum 0.9, nesterov, weight decay 5e-4) with a step LR schedule (decays at 50% and 75% of training)
-- Prints per-epoch train/test loss and accuracy, and saves the best checkpoint (by test accuracy) to `resnet20_cifar10.pth`
+- Real mixed precision (AMP, `autocast` + `GradScaler`) on GPU by default — lets a deeper model fit in 4 GB of VRAM instead of just benchmarking Tensor Cores in isolation
+- Prints trainable parameter count, per-epoch train/test loss and accuracy, and saves the best checkpoint (by test accuracy) to `<arquitetura>_cifar10.pth` (e.g. `resnet20_cifar10.pth`)
 
 Options:
 
 ```bash
 python main.py train --epochs 30 --batch-size 128 --lr 0.1 --data-dir ./data
+python main.py train --arquitetura resnet56 --seed 42   # deeper model, reproducible run
+python main.py train --sem-amp                          # disable AMP, exact old FP32 behavior
 ```
 
 ## Local test results
@@ -67,6 +70,8 @@ There are two workflow variants, kept side by side under different names so both
 - [.github/workflows/pytorch-gpu-python.yaml](.github/workflows/pytorch-gpu-python.yaml) **(current/default)** — runs `python3 main.py ...` **natively inside the runner pod**, no Docker involved. Needs [k8s/gpu-runner-values.yaml](k8s/gpu-runner-values.yaml) applied to the cluster: the runner pod's own image bundles Python/PyTorch (built from [k8s/runner-image/Dockerfile](k8s/runner-image/Dockerfile)), and it's that same pod's `nvidia.com/gpu: 1` reservation that's actually used to train — no Docker, no socket, one process, one real allocated GPU.
 - [.github/workflows/pytorch-gpu-docker.yaml](.github/workflows/pytorch-gpu-docker.yaml) — the earlier approach: builds the [Dockerfile](Dockerfile) image on the runner and calls `docker run --gpus all`, pulling the checkpoint/dataset back out with `docker cp` (its Docker daemon doesn't share the pod's filesystem, so bind mounts don't work). Needs [k8s/gpu-runner-values.docker.yaml](k8s/gpu-runner-values.docker.yaml) applied instead: it bind-mounts the host's Docker socket into the pod. Kept as a reference/fallback — its actual training container runs against the host's Docker daemon directly, outside the pod's own GPU reservation, so the `nvidia.com/gpu: 1` limit there doesn't really correspond to what's using the GPU.
 - [.github/workflows/teste-gpu.yaml](.github/workflows/teste-gpu.yaml) — a minimal sanity check (`nvidia-smi`, called directly, no Docker) to confirm the runner pod can see the GPU at all. Works under either of the two configs above, since both request `nvidia.com/gpu: 1` on the runner pod.
+
+`pytorch-gpu-python.yaml`'s `workflow_dispatch` inputs also cover `--arquitetura` (resnet20/56/110), `--seed`, and whether AMP is on — and it runs `pytest` (with `torch` already installed) as a fail-fast gate right before touching the GPU. Everything GPU-related stays self-hosted on purpose; the only GitHub-hosted job in this repo is [validacao-repositorio.yaml](.github/workflows/validacao-repositorio.yaml), a lint + torch-free-tests check on every push/PR — see [Testing and linting](#testing-and-linting).
 
 Both `k8s/gpu-runner-values*.yaml` files request the same `nvidia.com/gpu: 1` from Kubernetes — what differs is what the pod's container actually does with it. To switch which workflow variant is live:
 
@@ -143,9 +148,21 @@ python main.py
 
 `requirements.txt` lists `torch`, `torchvision`, `torchaudio` unpinned — on Linux, `pip install torch` pulls a CUDA-enabled build automatically. Pin exact versions there if you want a reproducible local setup.
 
+## Testing and linting
+
+No GPU needed — the pure-Python tests (`tests/test_formatting.py`, `tests/test_metrics.py`) run anywhere; `tests/test_resnet.py` needs `torch` and skips itself automatically if it isn't installed.
+
+```bash
+pip install -r requirements-dev.txt
+ruff check .
+pytest -v
+```
+
 ## Project layout
 
-- [main.py](main.py) — the environment/GPU test script (comments and output are in Portuguese)
+- [main.py](main.py) — thin entrypoint (`from pytorch_gpu_sandbox.cli import main`)
+- [pytorch_gpu_sandbox/](pytorch_gpu_sandbox/) — the application package (environment detection, benchmarks, ResNet model, data loading, training loop, CLI); comments and console output are in Portuguese
+- [tests/](tests/) — pytest suite; `pyproject.toml` has the `pytest`/`ruff` config, `requirements-dev.txt` the dev-only dependencies
 - [Dockerfile](Dockerfile) — builds on `pytorch/pytorch:latest` and installs torchvision/torchaudio
 - [compose.yaml](compose.yaml) — runs the container with GPU access
 - [compose.debug.yaml](compose.debug.yaml) — runs the container with `debugpy` for remote debugging
@@ -154,6 +171,7 @@ python main.py
 - [.github/workflows/pytorch-gpu-python.yaml](.github/workflows/pytorch-gpu-python.yaml) — runs benchmark/train in CI natively on the real RTX 3050, no Docker (current default; see [Running in CI on a real GPU](#running-in-ci-on-a-real-gpu-kubernetes--actions-runner-controller))
 - [.github/workflows/pytorch-gpu-docker.yaml](.github/workflows/pytorch-gpu-docker.yaml) — same, via `docker build`/`docker run --gpus all` (reference/fallback variant)
 - [.github/workflows/teste-gpu.yaml](.github/workflows/teste-gpu.yaml) — minimal GPU-visibility sanity check for the self-hosted runner
+- [.github/workflows/validacao-repositorio.yaml](.github/workflows/validacao-repositorio.yaml) — lint + torch-free tests on a regular GitHub-hosted runner (no GPU, no training) on every push/PR
 - [k8s/kind-gpu-config.yaml](k8s/kind-gpu-config.yaml) — kind cluster config that passes the RTX 3050 through from the host
 - [k8s/nvidia-device-plugin.yaml](k8s/nvidia-device-plugin.yaml) — snapshot of the NVIDIA k8s-device-plugin DaemonSet applied to the cluster
 - [k8s/gpu-runner-values.yaml](k8s/gpu-runner-values.yaml) — Helm values for `arc-runner-set-gpu` matching the Python workflow (current default)
