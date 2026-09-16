@@ -14,3 +14,7 @@ data/
 # Sistema
 .DS_Store
 *.pth
+
+# Segredos locais — NUNCA versionar. Lido automaticamente por
+# scripts/auto-cluster.sh se existir, mas fica só na sua máquina.
+scripts/token.md
