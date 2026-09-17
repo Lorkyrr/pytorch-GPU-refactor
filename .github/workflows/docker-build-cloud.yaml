@@ -27,17 +27,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Convert owner to lowercase
-        id: owner
-        run: echo "lowercase_owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
-
       - name: Build and push via Docker Build Cloud
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ steps.owner.outputs.lowercase_owner }}/pytorch-gpu-refactor:latest
-            ghcr.io/${{ steps.owner.outputs.lowercase_owner }}/pytorch-gpu-refactor:${{ github.sha }}
-          cache-from: type=registry,ref=ghcr.io/${{ steps.owner.outputs.lowercase_owner }}/pytorch-gpu-refactor:buildcache
-          cache-to: type=registry,ref=ghcr.io/${{ steps.owner.outputs.lowercase_owner }}/pytorch-gpu-refactor:buildcache,mode=max
+            ghcr.io/lorkyrr/pytorch-gpu-refactor:latest
+            ghcr.io/lorkyrr/pytorch-gpu-refactor:${{ github.sha }}
+          cache-from: type=registry,ref=ghcr.io/lorkyrr/pytorch-gpu-refactor:buildcache
+          cache-to: type=registry,ref=ghcr.io/lorkyrr/pytorch-gpu-refactor:buildcache,mode=max
