@@ -1,0 +1,39 @@
+name: Docker Build Cloud → GHCR
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-cloud:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push via Docker Build Cloud
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/pytorch-gpu-refactor:latest
+            ghcr.io/${{ github.repository_owner }}/pytorch-gpu-refactor:${{ github.sha }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/pytorch-gpu-refactor:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/pytorch-gpu-refactor:buildcache,mode=max
